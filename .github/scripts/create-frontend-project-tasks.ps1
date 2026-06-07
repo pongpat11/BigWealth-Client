@@ -1,6 +1,6 @@
 # Creates frontend-only GitHub issues and adds them to user project 3.
 # Prereqs: gh auth login (scopes: repo, read:project, project)
-# Run from repo root: pwsh .github/scripts/create-frontend-project-tasks.ps1
+# Run from repo root: powershell -ExecutionPolicy Bypass -File .github/scripts/create-frontend-project-tasks.ps1
 
 $ErrorActionPreference = "Stop"
 $Owner = "pongpat11"
@@ -9,8 +9,8 @@ $ProjectNumber = 3
 $Label = "frontend"
 
 function Ensure-Label {
-    $exists = gh label list --repo "$Owner/$Repo" --json name --jq ".[] | select(.name==`"$Label`") | .name" 2>$null
-    if (-not $exists) {
+    $names = gh label list --repo "$Owner/$Repo" --json name -q ".[].name" 2>$null
+    if ($names -notcontains $Label) {
         gh label create $Label --repo "$Owner/$Repo" --description "Client UI / UX work" --color "1D76DB"
     }
 }
@@ -377,9 +377,15 @@ foreach ($task in $tasks) {
         2>&1 | Select-Object -Last 1
 
     if ($issueUrl -match "https://") {
-        gh project item-add $ProjectNumber --owner $Owner --url $issueUrl | Out-Null
         $created += $issueUrl
-        Write-Host "Created and added: $issueUrl"
+        $projectOk = $false
+        gh project item-add $ProjectNumber --owner $Owner --url $issueUrl 2>$null
+        if ($LASTEXITCODE -eq 0) { $projectOk = $true }
+        if ($projectOk) {
+            Write-Host "Created and added: $issueUrl"
+        } else {
+            Write-Host "Created (not on project — run add-issues-to-project.ps1): $issueUrl"
+        }
     } else {
         Write-Warning "Failed: $($task.Title) -> $issueUrl"
     }

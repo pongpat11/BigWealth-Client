@@ -1,0 +1,80 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ */
+/* BigWealth design tokens                                             */
+/* Mobile-first PWA. Light theme first; dark mode via .dark class.     */
+/* ------------------------------------------------------------------ */
+@theme {
+  /* Brand — deep emerald (growth/wealth) with a gold accent */
+  --color-brand-50: #ecfdf5;
+  --color-brand-100: #d1fae5;
+  --color-brand-200: #a7f3d0;
+  --color-brand-300: #6ee7b7;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
+  --color-brand-800: #065f46;
+  --color-brand-900: #064e3b;
+
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+
+  /* Semantic financial colors */
+  --color-gain: #059669; /* positive / income */
+  --color-loss: #e11d48; /* negative / expense */
+
+  /* Neutral surface ramp (slate) */
+  --color-ink: #0f172a;
+  --color-muted: #64748b;
+  --color-line: #e2e8f0;
+  --color-surface: #ffffff;
+  --color-canvas: #f1f5f9;
+
+  /* Radii & shadows tuned for a soft, card-based fintech UI */
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px rgb(15 23 42 / 0.06);
+
+  --font-sans: 'Inter', 'IBM Plex Sans Thai', system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+}
+
+/* Dark theme overrides */
+.dark {
+  --color-ink: #f1f5f9;
+  --color-muted: #94a3b8;
+  --color-line: #1e293b;
+  --color-surface: #0f172a;
+  --color-canvas: #020617;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.5);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
+}
+
+/* Tabular numerals for money figures */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
