@@ -1,0 +1,24 @@
+# GitLab CI — mirror of the GitHub Actions pipeline.
+# Install → lint → test → build. Kept in sync with .github/workflows/ci.yml.
+
+stages:
+  - build
+
+build:
+  stage: build
+  image: node:22
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+  script:
+    - npm ci
+    - npm run lint
+    - npm test
+    - npm run build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
