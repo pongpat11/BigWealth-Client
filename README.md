@@ -46,5 +46,22 @@ The `figma-plugin/` folder can regenerate the screens in Figma.
 
 ## CI
 
-- **GitHub Actions** — `.github/workflows/ci.yml` (install → lint → build on push/PR)
+- **GitHub Actions** — `.github/workflows/ci.yml` (install → lint → test → build on push/PR)
 - **GitLab CI** — `.gitlab-ci.yml` (same pipeline, if mirrored to GitLab)
+
+## Deployment (GitHub Pages)
+
+Deployed automatically by `.github/workflows/deploy.yml` on every push to `main`
+(and via manual "Run workflow"). It builds and publishes `dist/` to GitHub Pages.
+
+URL: **https://pongpat11.github.io/BigWealth-Client/**
+
+Notes:
+- The production build uses base path `/BigWealth-Client/` (project site); dev and
+  tests stay at `/`. The router `basename` tracks this automatically via
+  `import.meta.env.BASE_URL`.
+- `404.html` is generated as a copy of `index.html` so client-side routes resolve
+  on deep links / refresh.
+
+**One-time setup (required before the first deploy):** in the repo on GitHub →
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
