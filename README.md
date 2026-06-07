@@ -63,5 +63,5 @@ Notes:
 - `404.html` is generated as a copy of `index.html` so client-side routes resolve
   on deep links / refresh.
 
-**One-time setup (required before the first deploy):** in the repo on GitHub →
-**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+Pages is enabled automatically by the workflow (`configure-pages` with
+`enablement: true`) on the first run — no manual Settings toggle needed.
