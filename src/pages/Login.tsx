@@ -1,7 +1,10 @@
-import { Link } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
+import { login } from '@/lib/auth'
+import { ApiError } from '@/lib/api'
 
 /** Google "G" mark — lucide has no brand logo, so inline the official colors. */
 function GoogleMark() {
@@ -28,6 +31,28 @@ function GoogleMark() {
 }
 
 export function Login() {
+  const navigate = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await login(email, password)
+      navigate('/')
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'Something went wrong. Please try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="flex min-h-full items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
@@ -46,13 +71,24 @@ export function Login() {
 
         <Card>
           <CardBody>
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-4" onSubmit={handleSubmit} noValidate>
+              {error && (
+                <p
+                  role="alert"
+                  className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]"
+                >
+                  {error}
+                </p>
+              )}
               <Input
                 id="email"
                 label="Email"
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
               <div className="space-y-1.5">
                 <Input
@@ -61,6 +97,9 @@ export function Login() {
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
                 <div className="text-right">
                   <Link
@@ -72,8 +111,8 @@ export function Login() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full">
-                Sign in
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? 'Signing in…' : 'Sign in'}
               </Button>
 
               {/* divider */}

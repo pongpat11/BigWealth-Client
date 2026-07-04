@@ -24,6 +24,17 @@ npm run preview  # preview the production build
 
 Requires Node.js 20.19+ or 22.12+.
 
+## Environment
+
+Copy `.env.example` → `.env` and set the API base URL:
+
+```
+VITE_API_URL="http://localhost:4000"   # BigWealth-Server
+```
+
+The login page calls this API (`POST /auth/login`); it defaults to
+`http://localhost:4000` when unset.
+
 ## Project structure
 
 ```
