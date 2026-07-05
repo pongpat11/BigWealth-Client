@@ -7,12 +7,14 @@ import * as api from '@/lib/transactions'
 vi.mock('@/lib/transactions', () => ({
   listTransactions: vi.fn(),
   createTransaction: vi.fn(),
+  updateTransaction: vi.fn(),
 }))
 
 const sample = {
   id: '1',
   type: 'expense' as const,
   amount: 185,
+  currency: 'THB',
   category: 'food',
   note: 'Lunch — som tam',
   date: new Date().toISOString(),
@@ -53,9 +55,23 @@ describe('Transactions page', () => {
 
     await waitFor(() =>
       expect(api.createTransaction).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'expense', amount: 120, category: 'food' }),
+        expect.objectContaining({ type: 'expense', amount: 120, category: 'food', currency: 'THB' }),
       ),
     )
     expect(await screen.findByText('Coffee')).toBeInTheDocument()
+  })
+
+  it('edits a transaction by clicking its row', async () => {
+    vi.mocked(api.listTransactions).mockResolvedValue([sample])
+    vi.mocked(api.updateTransaction).mockResolvedValue({ ...sample, note: 'Dinner', amount: 300 })
+    const user = userEvent.setup()
+    render(<Transactions />)
+
+    await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
+    expect(screen.getByText(/edit transaction/i)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(api.updateTransaction).toHaveBeenCalledWith('1', expect.any(Object)))
+    expect(await screen.findByText('Dinner')).toBeInTheDocument()
   })
 })

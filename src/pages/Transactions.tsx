@@ -11,32 +11,49 @@ import { ApiError } from '@/lib/api'
 import {
   createTransaction,
   listTransactions,
+  updateTransaction,
+  type Currency,
   type Transaction,
 } from '@/lib/transactions'
+
+const CURRENCIES: Currency[] = ['THB', 'USD']
+
+function formatMoney(amount: number, currency: string) {
+  if (currency === 'THB') return formatTHB(amount)
+  if (currency === 'USD')
+    return '$' + amount.toLocaleString('en-US', { maximumFractionDigits: 2 })
+  return `${amount.toLocaleString()} ${currency}`
+}
 
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10)
 }
 
-function AddTransactionForm({
-  onAdded,
+const selectClass =
+  'h-11 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-[15px] text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500'
+
+function TransactionForm({
+  initial,
+  onSaved,
   onClose,
 }: {
-  onAdded: (t: Transaction) => void
+  initial?: Transaction
+  onSaved: (t: Transaction, isEdit: boolean) => void
   onClose: () => void
 }) {
-  const [type, setType] = useState<'income' | 'expense'>('expense')
-  const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('')
-  const [date, setDate] = useState(todayInputValue())
-  const [note, setNote] = useState('')
+  const isEdit = Boolean(initial)
+  const [type, setType] = useState<'income' | 'expense'>(initial?.type ?? 'expense')
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
+  const [currency, setCurrency] = useState<Currency>(
+    (initial?.currency as Currency) ?? 'THB',
+  )
+  const [category, setCategory] = useState(initial?.category ?? '')
+  const [date, setDate] = useState(initial ? initial.date.slice(0, 10) : todayInputValue())
+  const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const options = useMemo(
-    () => categories.filter((c) => c.kind === type),
-    [type],
-  )
+  const options = useMemo(() => categories.filter((c) => c.kind === type), [type])
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -51,15 +68,19 @@ function AddTransactionForm({
       return
     }
     setSaving(true)
+    const input = {
+      type,
+      amount: value,
+      currency,
+      category,
+      note: note.trim() || undefined,
+      date: new Date(date).toISOString(),
+    }
     try {
-      const created = await createTransaction({
-        type,
-        amount: value,
-        category,
-        note: note.trim() || undefined,
-        date: new Date(date).toISOString(),
-      })
-      onAdded(created)
+      const saved = initial
+        ? await updateTransaction(initial.id, input)
+        : await createTransaction(input)
+      onSaved(saved, isEdit)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
     } finally {
@@ -71,13 +92,15 @@ function AddTransactionForm({
     <Card>
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
+          <p className="text-sm font-semibold text-[var(--color-ink)]">
+            {isEdit ? 'Edit transaction' : 'New transaction'}
+          </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
             </p>
           )}
 
-          {/* Type toggle */}
           <div className="flex gap-2">
             {(['expense', 'income'] as const).map((t) => (
               <button
@@ -99,17 +122,38 @@ function AddTransactionForm({
             ))}
           </div>
 
-          <Input
-            id="amount"
-            label="Amount (฿)"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.01"
-            placeholder="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Input
+                id="amount"
+                label="Amount"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </div>
+            <div className="w-28">
+              <label htmlFor="currency" className="text-[13px] font-medium text-[var(--color-muted)]">
+                Currency
+              </label>
+              <select
+                id="currency"
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value as Currency)}
+                className={selectClass + ' mt-1.5'}
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="category" className="text-[13px] font-medium text-[var(--color-muted)]">
@@ -119,7 +163,7 @@ function AddTransactionForm({
               id="category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="h-11 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-[15px] text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500"
+              className={selectClass}
             >
               <option value="">Select…</option>
               {options.map((c) => (
@@ -151,7 +195,7 @@ function AddTransactionForm({
               Cancel
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : 'Add transaction'}
+              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add transaction'}
             </Button>
           </div>
         </form>
@@ -160,11 +204,15 @@ function AddTransactionForm({
   )
 }
 
-function TransactionRow({ tx }: { tx: Transaction }) {
+function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transaction) => void }) {
   const cat = categoryById[tx.category]
   const positive = tx.type === 'income'
   return (
-    <div className="flex items-center gap-3 py-3">
+    <button
+      type="button"
+      onClick={() => onEdit(tx)}
+      className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-[var(--color-canvas)]"
+    >
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-full"
         style={{ backgroundColor: (cat?.color ?? '#94a3b8') + '20', color: cat?.color ?? '#64748b' }}
@@ -186,49 +234,73 @@ function TransactionRow({ tx }: { tx: Transaction }) {
         }
       >
         {positive ? '+' : '−'}
-        {formatTHB(tx.amount)}
+        {formatMoney(tx.amount, tx.currency)}
       </span>
-    </div>
+    </button>
   )
 }
 
 export function Transactions() {
   const [items, setItems] = useState<Transaction[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [showForm, setShowForm] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<Transaction | null>(null)
 
   useEffect(() => {
     let active = true
     listTransactions()
       .then((rows) => active && setItems(rows))
-      .catch((err) =>
-        active &&
-        setError(err instanceof ApiError ? err.message : 'Could not load transactions.'),
+      .catch(
+        (err) =>
+          active &&
+          setError(err instanceof ApiError ? err.message : 'Could not load transactions.'),
       )
     return () => {
       active = false
     }
   }, [])
 
+  function closeForm() {
+    setFormOpen(false)
+    setEditing(null)
+  }
+
+  function handleSaved(saved: Transaction, isEdit: boolean) {
+    setItems((prev) => {
+      const list = prev ?? []
+      return isEdit ? list.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...list]
+    })
+    closeForm()
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Transactions"
         action={
-          <Button size="sm" onClick={() => setShowForm((v) => !v)}>
+          <Button
+            size="sm"
+            onClick={() => {
+              if (formOpen && editing === null) {
+                closeForm()
+              } else {
+                setEditing(null)
+                setFormOpen(true)
+              }
+            }}
+          >
             <Plus size={16} aria-hidden />
             Add
           </Button>
         }
       />
 
-      {showForm && (
-        <AddTransactionForm
-          onAdded={(t) => {
-            setItems((prev) => [t, ...(prev ?? [])])
-            setShowForm(false)
-          }}
-          onClose={() => setShowForm(false)}
+      {formOpen && (
+        <TransactionForm
+          key={editing?.id ?? 'new'}
+          initial={editing ?? undefined}
+          onSaved={handleSaved}
+          onClose={closeForm}
         />
       )}
 
@@ -264,7 +336,14 @@ export function Transactions() {
         <Card>
           <CardBody className="divide-y divide-[var(--color-line)] py-0">
             {items.map((tx) => (
-              <TransactionRow key={tx.id} tx={tx} />
+              <TransactionRow
+                key={tx.id}
+                tx={tx}
+                onEdit={(t) => {
+                  setEditing(t)
+                  setFormOpen(true)
+                }}
+              />
             ))}
           </CardBody>
         </Card>
