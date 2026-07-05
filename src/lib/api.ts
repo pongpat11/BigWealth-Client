@@ -1,5 +1,6 @@
 // Thin fetch wrapper around the BigWealth API. Centralises the base URL,
-// JSON handling, and error mapping so callers get a typed result or an ApiError.
+// JSON handling, error mapping, and transparent access-token refresh on 401.
+import { clearTokens, refreshSession } from './auth'
 
 const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').replace(
   /\/$/,
@@ -28,8 +29,10 @@ interface RequestOptions {
 
 export async function apiFetch<T>(
   path: string,
-  { method = 'GET', body, token, signal }: RequestOptions = {},
+  options: RequestOptions = {},
+  _retried = false,
 ): Promise<T> {
+  const { method = 'GET', body, token, signal } = options
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
@@ -51,6 +54,17 @@ export async function apiFetch<T>(
   const payload = isJson ? await res.json().catch(() => undefined) : undefined
 
   if (!res.ok) {
+    // Access token expired: refresh once and retry the original request.
+    if (res.status === 401 && token && !_retried && path !== '/auth/refresh') {
+      const newToken = await refreshSession().catch(() => null)
+      if (newToken) {
+        return apiFetch<T>(path, { ...options, token: newToken }, true)
+      }
+      // Refresh failed — the session is dead; the route guard will send the
+      // user to /login on the next navigation.
+      clearTokens()
+    }
+
     const message =
       (payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)
