@@ -62,3 +62,43 @@ export function daysUntil(iso: string): number {
   const ms = new Date(iso).getTime() - Date.now()
   return Math.ceil(ms / 86_400_000)
 }
+
+/** The browser's IANA timezone, e.g. "Asia/Bangkok". */
+export function browserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone
+}
+
+/**
+ * Convert an ISO instant to a `<input type="datetime-local">` value
+ * (`YYYY-MM-DDTHH:mm`), rendered in the given timezone (defaults to local).
+ */
+export function toDateTimeLocalValue(iso: string, timeZone?: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(iso))
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+}
+
+/** Current time as a datetime-local value in the browser's zone. */
+export function nowDateTimeLocalValue(): string {
+  return toDateTimeLocalValue(new Date().toISOString())
+}
+
+/** Date + time shown in a specific timezone, e.g. "5 Jul 2026, 12:30". */
+export function formatDateTime(iso: string, timeZone?: string | null): string {
+  return new Date(iso).toLocaleString('en-GB', {
+    timeZone: timeZone ?? undefined,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
