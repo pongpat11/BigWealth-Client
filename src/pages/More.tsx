@@ -6,6 +6,7 @@ import {
   Landmark,
   LogOut,
   Settings,
+  Tag,
   Target,
 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
@@ -17,6 +18,7 @@ const items = [
   { to: '/debts', label: 'Debts', icon: CreditCard },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/accounts', label: 'Accounts', icon: Landmark },
+  { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
