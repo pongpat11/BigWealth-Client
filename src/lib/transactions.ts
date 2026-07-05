@@ -4,6 +4,12 @@ import { getAccessToken } from './auth'
 
 export type Currency = 'THB' | 'USD'
 
+export interface TransactionLabel {
+  id: string
+  name: string
+  color: string | null
+}
+
 export interface Transaction {
   id: string
   type: 'income' | 'expense'
@@ -13,6 +19,7 @@ export interface Transaction {
   note: string | null
   date: string
   createdAt: string
+  labels: TransactionLabel[]
 }
 
 export interface TransactionInput {
@@ -22,6 +29,7 @@ export interface TransactionInput {
   category: string
   note?: string
   date: string // ISO
+  labelIds?: string[]
 }
 
 function auth() {

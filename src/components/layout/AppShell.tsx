@@ -10,6 +10,7 @@ import {
   PieChart,
   Settings,
   Tag,
+  Tags,
   Target,
   Wallet,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const secondaryNav = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/accounts', label: 'Accounts', icon: Landmark },
   { to: '/categories', label: 'Categories', icon: Tag },
+  { to: '/labels', label: 'Labels', icon: Tags },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
