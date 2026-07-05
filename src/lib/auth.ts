@@ -63,3 +63,32 @@ export async function logout(): Promise<void> {
     }).catch(() => undefined)
   }
 }
+
+let refreshInFlight: Promise<string> | null = null
+
+/**
+ * Exchange the stored refresh token for a fresh access token, storing the
+ * rotated pair. Single-flight: concurrent callers share one request (the server
+ * rotates refresh tokens, so parallel refreshes would invalidate each other).
+ * Throws if there's no refresh token or the server rejects it.
+ */
+export function refreshSession(): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null
+    })
+  }
+  return refreshInFlight
+}
+
+async function doRefresh(): Promise<string> {
+  const refreshToken = localStorage.getItem(REFRESH_KEY)
+  if (!refreshToken) throw new Error('No refresh token')
+  // No bearer token on this call, so it never triggers the 401 refresh retry.
+  const data = await apiFetch<AuthTokens>('/auth/refresh', {
+    method: 'POST',
+    body: { refreshToken },
+  })
+  storeTokens(data)
+  return data.accessToken
+}
