@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
-import { login } from '@/lib/auth'
+import { isAuthenticated, login } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 
 /** Google "G" mark — lucide has no brand logo, so inline the official colors. */
@@ -32,10 +32,20 @@ function GoogleMark() {
 
 export function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  // Where to go after signing in (set by RequireAuth), defaulting to the dashboard.
+  const from =
+    (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/'
+
+  // Already signed in? Skip the form.
+  if (isAuthenticated()) {
+    return <Navigate to={from} replace />
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -43,7 +53,7 @@ export function Login() {
     setSubmitting(true)
     try {
       await login(email, password)
-      navigate('/')
+      navigate(from, { replace: true })
     } catch (err) {
       setError(
         err instanceof ApiError ? err.message : 'Something went wrong. Please try again.',

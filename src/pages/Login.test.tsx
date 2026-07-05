@@ -6,7 +6,10 @@ import { Login } from './Login'
 import * as auth from '@/lib/auth'
 import { ApiError } from '@/lib/api'
 
-vi.mock('@/lib/auth', () => ({ login: vi.fn() }))
+vi.mock('@/lib/auth', () => ({
+  login: vi.fn(),
+  isAuthenticated: vi.fn(() => false),
+}))
 
 function renderLogin() {
   return render(
