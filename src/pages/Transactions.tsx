@@ -10,6 +10,7 @@ import { formatDate, formatTHB } from '@/lib/format'
 import { ApiError } from '@/lib/api'
 import {
   createTransaction,
+  deleteTransaction,
   listTransactions,
   updateTransaction,
   type Currency,
@@ -35,10 +36,12 @@ const selectClass =
 function TransactionForm({
   initial,
   onSaved,
+  onDeleted,
   onClose,
 }: {
   initial?: Transaction
   onSaved: (t: Transaction, isEdit: boolean) => void
+  onDeleted: (id: string) => void
   onClose: () => void
 }) {
   const isEdit = Boolean(initial)
@@ -52,8 +55,27 @@ function TransactionForm({
   const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [armed, setArmed] = useState(false) // two-tap delete confirm
 
   const options = useMemo(() => categories.filter((c) => c.kind === type), [type])
+
+  async function handleDelete() {
+    if (!initial) return
+    if (!armed) {
+      setArmed(true)
+      return
+    }
+    setError(null)
+    setSaving(true)
+    try {
+      await deleteTransaction(initial.id)
+      onDeleted(initial.id)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
+      setSaving(false)
+      setArmed(false)
+    }
+  }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -198,6 +220,17 @@ function TransactionForm({
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add transaction'}
             </Button>
           </div>
+
+          {isEdit && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={saving}
+              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-50 disabled:opacity-50"
+            >
+              {armed ? 'Tap again to delete' : 'Delete transaction'}
+            </button>
+          )}
         </form>
       </CardBody>
     </Card>
@@ -273,6 +306,11 @@ export function Transactions() {
     closeForm()
   }
 
+  function handleDeleted(id: string) {
+    setItems((prev) => (prev ?? []).filter((t) => t.id !== id))
+    closeForm()
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -300,6 +338,7 @@ export function Transactions() {
           key={editing?.id ?? 'new'}
           initial={editing ?? undefined}
           onSaved={handleSaved}
+          onDeleted={handleDeleted}
           onClose={closeForm}
         />
       )}

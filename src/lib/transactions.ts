@@ -47,3 +47,7 @@ export async function updateTransaction(
     ...auth(),
   })
 }
+
+export async function deleteTransaction(id: string): Promise<void> {
+  await apiFetch<void>(`/transactions/${id}`, { method: 'DELETE', ...auth() })
+}
