@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   PieChart,
   Settings,
+  Tag,
   Target,
   Wallet,
 } from 'lucide-react'
@@ -29,6 +30,7 @@ const secondaryNav = [
   { to: '/debts', label: 'Debts', icon: CreditCard },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/accounts', label: 'Accounts', icon: Landmark },
+  { to: '/categories', label: 'Categories', icon: Tag },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
