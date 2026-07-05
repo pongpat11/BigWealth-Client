@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { categories, categoryById } from '@/data/mock'
 import { formatDate, formatTHB } from '@/lib/format'
 import { ApiError } from '@/lib/api'
+import { listLabels, type Label } from '@/lib/labels'
 import {
   createTransaction,
   deleteTransaction,
@@ -16,6 +17,8 @@ import {
   type Currency,
   type Transaction,
 } from '@/lib/transactions'
+
+const FALLBACK_LABEL_COLOR = '#94a3b8'
 
 const CURRENCIES: Currency[] = ['THB', 'USD']
 
@@ -56,8 +59,28 @@ function TransactionForm({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [armed, setArmed] = useState(false) // two-tap delete confirm
+  const [labels, setLabels] = useState<Label[]>([])
+  const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>(
+    initial?.labels.map((l) => l.id) ?? [],
+  )
 
   const options = useMemo(() => categories.filter((c) => c.kind === type), [type])
+
+  useEffect(() => {
+    let active = true
+    listLabels()
+      .then((rows) => active && setLabels(rows))
+      .catch(() => undefined) // labels are optional; a fetch failure just hides the picker
+    return () => {
+      active = false
+    }
+  }, [])
+
+  function toggleLabel(id: string) {
+    setSelectedLabelIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }
 
   async function handleDelete() {
     if (!initial) return
@@ -97,6 +120,7 @@ function TransactionForm({
       category,
       note: note.trim() || undefined,
       date: new Date(date).toISOString(),
+      labelIds: selectedLabelIds,
     }
     try {
       const saved = initial
@@ -196,6 +220,38 @@ function TransactionForm({
             </select>
           </div>
 
+          {labels.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] font-medium text-[var(--color-muted)]">Labels</span>
+              <div className="flex flex-wrap gap-2">
+                {labels.map((l) => {
+                  const active = selectedLabelIds.includes(l.id)
+                  const color = l.color ?? FALLBACK_LABEL_COLOR
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      onClick={() => toggleLabel(l.id)}
+                      style={
+                        active
+                          ? { backgroundColor: color + '20', color }
+                          : undefined
+                      }
+                      className={
+                        'rounded-full px-3 py-1 text-xs font-medium transition-colors ' +
+                        (active
+                          ? ''
+                          : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
+                      }
+                    >
+                      {l.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <Input
             id="date"
             label="Date"
@@ -259,6 +315,22 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
         <p className="text-xs text-[var(--color-muted)]">
           {cat?.name ?? tx.category} · {formatDate(tx.date)}
         </p>
+        {tx.labels.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {tx.labels.map((l) => (
+              <span
+                key={l.id}
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: (l.color ?? FALLBACK_LABEL_COLOR) + '20',
+                  color: l.color ?? FALLBACK_LABEL_COLOR,
+                }}
+              >
+                {l.name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <span
         className={
