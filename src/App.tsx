@@ -5,6 +5,7 @@ import { ComingSoon } from '@/pages/ComingSoon'
 import { Dashboard } from '@/pages/Dashboard'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
+import { Transactions } from '@/pages/Transactions'
 
 // Every app screen requires a session (RequireAuth). Unauthenticated visitors
 // are redirected to /login and returned to their target after signing in.
@@ -15,7 +16,7 @@ function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/transactions" element={<ComingSoon title="Transactions" />} />
+          <Route path="/transactions" element={<Transactions />} />
           <Route path="/portfolio" element={<ComingSoon title="Portfolio" />} />
           <Route path="/budgets" element={<ComingSoon title="Budgets" />} />
           <Route path="/more" element={<More />} />
