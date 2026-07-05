@@ -8,6 +8,7 @@ vi.mock('@/lib/transactions', () => ({
   listTransactions: vi.fn(),
   createTransaction: vi.fn(),
   updateTransaction: vi.fn(),
+  deleteTransaction: vi.fn(),
 }))
 
 const sample = {
@@ -73,5 +74,20 @@ describe('Transactions page', () => {
 
     await waitFor(() => expect(api.updateTransaction).toHaveBeenCalledWith('1', expect.any(Object)))
     expect(await screen.findByText('Dinner')).toBeInTheDocument()
+  })
+
+  it('deletes a transaction (two-tap confirm)', async () => {
+    vi.mocked(api.listTransactions).mockResolvedValue([sample])
+    vi.mocked(api.deleteTransaction).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<Transactions />)
+
+    await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
+    // first tap arms, second tap deletes
+    await user.click(screen.getByRole('button', { name: /delete transaction/i }))
+    await user.click(screen.getByRole('button', { name: /tap again to delete/i }))
+
+    await waitFor(() => expect(api.deleteTransaction).toHaveBeenCalledWith('1'))
+    expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
   })
 })
