@@ -126,4 +126,20 @@ describe('Categories page', () => {
     await waitFor(() => expect(api.deleteCategory).toHaveBeenCalledWith('freelance'))
     expect(screen.queryByText('Freelance')).not.toBeInTheDocument()
   })
+
+  it('deletes a custom top-level category via the API (not just local state)', async () => {
+    vi.mocked(api.listCategories).mockResolvedValue([sideHustle])
+    vi.mocked(api.deleteCategory).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<Categories />)
+
+    await screen.findByText('Side Hustle')
+    // Only one delete affordance exists here: the category's own (no sub-categories).
+    const deleteButtons = screen.getAllByText('×')
+    await user.click(deleteButtons[0])
+    await user.click(screen.getByText(/confirm\?/i))
+
+    await waitFor(() => expect(api.deleteCategory).toHaveBeenCalledWith('side-hustle'))
+    expect(screen.queryByText('Side Hustle')).not.toBeInTheDocument()
+  })
 })
