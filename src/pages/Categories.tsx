@@ -205,7 +205,7 @@ function CategoryGroup({
     }
   }
 
-  async function handleDeleteSub(id: string) {
+  async function handleDelete(id: string) {
     try {
       await deleteCategory(id)
       onRemoved(id)
@@ -264,7 +264,7 @@ function CategoryGroup({
                   {sub.name}
                 </span>
                 {!sub.isDefault && (
-                  <DeleteButton onConfirm={() => handleDeleteSub(sub.id)} />
+                  <DeleteButton onConfirm={() => handleDelete(sub.id)} />
                 )}
               </div>
             ))}
@@ -291,7 +291,7 @@ function CategoryGroup({
         )}
 
         {!category.isDefault && (
-          <DeleteButton onConfirm={() => onRemoved(category.id)} />
+          <DeleteButton onConfirm={() => handleDelete(category.id)} />
         )}
       </CardBody>
     </Card>
