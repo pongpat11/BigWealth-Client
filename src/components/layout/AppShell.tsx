@@ -1,10 +1,11 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
   BarChart3,
   CreditCard,
   Home,
   Landmark,
+  LogOut,
   MoreHorizontal,
   PieChart,
   Settings,
@@ -12,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { logout } from '@/lib/auth'
 
 // Primary tabs — shown in the mobile bottom bar and at the top of the sidebar.
 const primaryNav = [
@@ -93,6 +95,13 @@ function TabLink({
  * per docs/DESIGN_SPEC.md §6 "Navigation". Content renders via <Outlet/>.
  */
 export function AppShell() {
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="min-h-full lg:flex">
       {/* Desktop sidebar */}
@@ -114,6 +123,14 @@ export function AppShell() {
             <SidebarLink key={item.to} {...item} />
           ))}
         </nav>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--color-muted)] transition-colors hover:bg-[var(--color-canvas)] hover:text-[var(--color-loss)]"
+        >
+          <LogOut size={18} aria-hidden />
+          Log out
+        </button>
       </aside>
 
       {/* Content */}

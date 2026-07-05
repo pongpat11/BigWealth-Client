@@ -1,15 +1,16 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   ChevronRight,
   CreditCard,
   Landmark,
-  LogIn,
+  LogOut,
   Settings,
   Target,
 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { logout } from '@/lib/auth'
 
 const items = [
   { to: '/goals', label: 'Savings Goals', icon: Target },
@@ -17,11 +18,17 @@ const items = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/accounts', label: 'Accounts', icon: Landmark },
   { to: '/settings', label: 'Settings', icon: Settings },
-  { to: '/login', label: 'Login screen', icon: LogIn },
 ] as const
 
 /** Mobile hub for secondary screens (desktop shows them in the sidebar). */
 export function More() {
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader title="More" />
@@ -44,6 +51,21 @@ export function More() {
               />
             </Link>
           ))}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody className="p-0 px-4">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-3 py-3.5 text-sm font-medium text-[var(--color-loss)]"
+          >
+            <span className="flex size-9 items-center justify-center rounded-full bg-rose-50 text-[var(--color-loss)]">
+              <LogOut size={16} aria-hidden />
+            </span>
+            <span className="flex-1 text-left">Log out</span>
+          </button>
         </CardBody>
       </Card>
     </div>
