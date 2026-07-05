@@ -33,6 +33,10 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          # Set this as a repository Variable (Settings → Secrets and variables →
+          # Actions → Variables). Falls back to localhost when unset.
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
 
       - name: SPA fallback + disable Jekyll
         # Pages has no server-side routing — serve index.html for unknown
