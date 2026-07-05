@@ -5,9 +5,15 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { categories, categoryById } from '@/data/mock'
-import { formatDate, formatTHB } from '@/lib/format'
+import {
+  browserTimezone,
+  formatDateTime,
+  formatTHB,
+  nowDateTimeLocalValue,
+  toDateTimeLocalValue,
+} from '@/lib/format'
 import { ApiError } from '@/lib/api'
+import { listCategories, type Category } from '@/lib/categories'
 import { listLabels, type Label } from '@/lib/labels'
 import {
   createTransaction,
@@ -18,19 +24,14 @@ import {
   type Transaction,
 } from '@/lib/transactions'
 
-const FALLBACK_LABEL_COLOR = '#94a3b8'
-
 const CURRENCIES: Currency[] = ['THB', 'USD']
+const FALLBACK_COLOR = '#94a3b8'
 
 function formatMoney(amount: number, currency: string) {
   if (currency === 'THB') return formatTHB(amount)
   if (currency === 'USD')
     return '$' + amount.toLocaleString('en-US', { maximumFractionDigits: 2 })
   return `${amount.toLocaleString()} ${currency}`
-}
-
-function todayInputValue() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 const selectClass =
@@ -53,28 +54,43 @@ function TransactionForm({
   const [currency, setCurrency] = useState<Currency>(
     (initial?.currency as Currency) ?? 'THB',
   )
-  const [category, setCategory] = useState(initial?.category ?? '')
-  const [date, setDate] = useState(initial ? initial.date.slice(0, 10) : todayInputValue())
+  const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
+  const [subCategoryId, setSubCategoryId] = useState(initial?.subCategoryId ?? '')
+  const [dateTime, setDateTime] = useState(
+    initial ? toDateTimeLocalValue(initial.date) : nowDateTimeLocalValue(),
+  )
   const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [armed, setArmed] = useState(false) // two-tap delete confirm
+  const [categories, setCategories] = useState<Category[]>([])
   const [labels, setLabels] = useState<Label[]>([])
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>(
     initial?.labels.map((l) => l.id) ?? [],
   )
-
-  const options = useMemo(() => categories.filter((c) => c.kind === type), [type])
+  const timezone = browserTimezone()
 
   useEffect(() => {
     let active = true
+    listCategories()
+      .then((rows) => active && setCategories(rows))
+      .catch(() => undefined)
     listLabels()
       .then((rows) => active && setLabels(rows))
-      .catch(() => undefined) // labels are optional; a fetch failure just hides the picker
+      .catch(() => undefined)
     return () => {
       active = false
     }
   }, [])
+
+  const topLevel = useMemo(
+    () => categories.filter((c) => !c.parentId && c.kind === type),
+    [categories, type],
+  )
+  const subOptions = useMemo(
+    () => categories.filter((c) => c.parentId === categoryId),
+    [categories, categoryId],
+  )
 
   function toggleLabel(id: string) {
     setSelectedLabelIds((prev) =>
@@ -108,7 +124,7 @@ function TransactionForm({
       setError('Enter an amount greater than 0.')
       return
     }
-    if (!category) {
+    if (!categoryId) {
       setError('Pick a category.')
       return
     }
@@ -117,9 +133,11 @@ function TransactionForm({
       type,
       amount: value,
       currency,
-      category,
+      categoryId,
+      subCategoryId: subCategoryId || undefined,
       note: note.trim() || undefined,
-      date: new Date(date).toISOString(),
+      date: new Date(dateTime).toISOString(),
+      timezone,
       labelIds: selectedLabelIds,
     }
     try {
@@ -154,7 +172,8 @@ function TransactionForm({
                 type="button"
                 onClick={() => {
                   setType(t)
-                  setCategory('')
+                  setCategoryId('')
+                  setSubCategoryId('')
                 }}
                 className={
                   'flex-1 rounded-xl py-2 text-sm font-semibold capitalize transition-colors ' +
@@ -207,12 +226,15 @@ function TransactionForm({
             </label>
             <select
               id="category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              value={categoryId}
+              onChange={(e) => {
+                setCategoryId(e.target.value)
+                setSubCategoryId('')
+              }}
               className={selectClass}
             >
               <option value="">Select…</option>
-              {options.map((c) => (
+              {topLevel.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -220,28 +242,43 @@ function TransactionForm({
             </select>
           </div>
 
+          {subOptions.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="subcategory" className="text-[13px] font-medium text-[var(--color-muted)]">
+                Sub-category (optional)
+              </label>
+              <select
+                id="subcategory"
+                value={subCategoryId}
+                onChange={(e) => setSubCategoryId(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">None</option>
+                {subOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {labels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[13px] font-medium text-[var(--color-muted)]">Labels</span>
               <div className="flex flex-wrap gap-2">
                 {labels.map((l) => {
                   const active = selectedLabelIds.includes(l.id)
-                  const color = l.color ?? FALLBACK_LABEL_COLOR
+                  const color = l.color ?? FALLBACK_COLOR
                   return (
                     <button
                       key={l.id}
                       type="button"
                       onClick={() => toggleLabel(l.id)}
-                      style={
-                        active
-                          ? { backgroundColor: color + '20', color }
-                          : undefined
-                      }
+                      style={active ? { backgroundColor: color + '20', color } : undefined}
                       className={
                         'rounded-full px-3 py-1 text-xs font-medium transition-colors ' +
-                        (active
-                          ? ''
-                          : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
+                        (active ? '' : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
                       }
                     >
                       {l.name}
@@ -252,13 +289,22 @@ function TransactionForm({
             </div>
           )}
 
-          <Input
-            id="date"
-            label="Date"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="datetime" className="text-[13px] font-medium text-[var(--color-muted)]">
+              Date &amp; time
+            </label>
+            <input
+              id="datetime"
+              type="datetime-local"
+              value={dateTime}
+              onChange={(e) => setDateTime(e.target.value)}
+              className={selectClass}
+            />
+            <span className="text-xs text-[var(--color-muted)]">
+              Saved with your timezone · {timezone}
+            </span>
+          </div>
+
           <Input
             id="note"
             label="Note (optional)"
@@ -294,8 +340,11 @@ function TransactionForm({
 }
 
 function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transaction) => void }) {
-  const cat = categoryById[tx.category]
+  const cat = tx.category
   const positive = tx.type === 'income'
+  const categoryLabel = tx.subCategory
+    ? `${cat?.name ?? ''} · ${tx.subCategory.name}`
+    : (cat?.name ?? 'Uncategorized')
   return (
     <button
       type="button"
@@ -304,16 +353,16 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
     >
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-full"
-        style={{ backgroundColor: (cat?.color ?? '#94a3b8') + '20', color: cat?.color ?? '#64748b' }}
+        style={{ backgroundColor: (cat?.color ?? FALLBACK_COLOR) + '20', color: cat?.color ?? '#64748b' }}
       >
         <Icon name={cat?.icon ?? 'Circle'} size={16} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || cat?.name || tx.category}
+          {tx.note || categoryLabel}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
-          {cat?.name ?? tx.category} · {formatDate(tx.date)}
+          {categoryLabel} · {formatDateTime(tx.date, tx.timezone)}
         </p>
         {tx.labels.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
@@ -322,8 +371,8 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
                 key={l.id}
                 className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
                 style={{
-                  backgroundColor: (l.color ?? FALLBACK_LABEL_COLOR) + '20',
-                  color: l.color ?? FALLBACK_LABEL_COLOR,
+                  backgroundColor: (l.color ?? FALLBACK_COLOR) + '20',
+                  color: l.color ?? FALLBACK_COLOR,
                 }}
               >
                 {l.name}
