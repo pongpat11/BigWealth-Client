@@ -7,6 +7,11 @@ const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:4000').repla
   '',
 )
 
+// Dev-only offline mode: serve requests from an in-memory mock instead of a real
+// backend. Enable by running the client with VITE_MOCK=1 (see .env.mock).
+const USE_MOCK =
+  import.meta.env.VITE_MOCK === '1' || import.meta.env.VITE_MOCK === 'true'
+
 export class ApiError extends Error {
   status: number
   details?: unknown
@@ -33,6 +38,12 @@ export async function apiFetch<T>(
   _retried = false,
 ): Promise<T> {
   const { method = 'GET', body, token, signal } = options
+
+  if (USE_MOCK) {
+    const { mockFetch } = await import('./mock/mockApi')
+    return mockFetch<T>(path, method, body as Record<string, unknown> | undefined)
+  }
+
   const headers: Record<string, string> = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
