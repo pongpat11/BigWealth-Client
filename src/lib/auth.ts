@@ -52,6 +52,14 @@ export async function login(
   return data.user
 }
 
+/** The signed-in user's profile. */
+export async function me(): Promise<AuthUser> {
+  const { user } = await apiFetch<{ user: AuthUser }>('/auth/me', {
+    token: getAccessToken() ?? undefined,
+  })
+  return user
+}
+
 export async function logout(): Promise<void> {
   const refreshToken = localStorage.getItem(REFRESH_KEY)
   clearTokens()

@@ -9,6 +9,8 @@ import tailwindcss from '@tailwindcss/vite'
 // so the production build needs that base path. Dev/preview/test stay at '/'.
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/BigWealth-Client/' : '/',
+  // Honor an externally assigned port (e.g. the Claude preview harness).
+  server: { port: Number(process.env.PORT) || 5173 },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
