@@ -4,6 +4,7 @@
 import { ApiError } from '../api'
 import type { Account } from '../accounts'
 import type { Category } from '../categories'
+import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Label } from '../labels'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -30,7 +31,10 @@ let labels: Label[] = [
   { id: 'reimburse', name: 'Reimbursable', color: '#f59e0b', isDefault: false },
 ]
 
-let accounts: Account[] = [
+// Stored form holds the starting balance; currentBalance is derived on read.
+type StoredAccount = Omit<Account, 'currentBalance'>
+
+let accounts: StoredAccount[] = [
   { id: 'kbank', name: 'KBank Savings', institution: 'Kasikornbank', type: 'bank', currency: 'THB', balance: 285_400, createdAt: daysAgo(120) },
   { id: 'scb', name: 'SCB Current', institution: 'Siam Commercial', type: 'bank', currency: 'THB', balance: 64_200, createdAt: daysAgo(118) },
   { id: 'cash', name: 'Cash Wallet', institution: null, type: 'cash', currency: 'THB', balance: 5_800, createdAt: daysAgo(110) },
@@ -48,6 +52,19 @@ function txCategory(catId: string | null): TransactionCategory | null {
 function txAccount(accId: string | null): TransactionAccount | null {
   const a = accounts.find((x) => x.id === accId)
   return a ? { id: a.id, name: a.name, type: a.type } : null
+}
+
+/** Derive currentBalance = starting balance ± this account's transactions. */
+function withCurrentBalance(a: StoredAccount): Account {
+  let income = 0
+  let expense = 0
+  for (const t of transactions) {
+    if (t.accountId !== a.id || t.currency !== a.currency) continue
+    if (t.type === 'income') income += t.amount
+    else expense += t.amount
+  }
+  const delta = a.type === 'debt' ? expense - income : income - expense
+  return { ...a, currentBalance: a.balance + delta }
 }
 
 interface TxSeed {
@@ -116,14 +133,18 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       } as T
     if (param === 'refresh') return tokens() as T
     if (param === 'logout') return undefined as T
+    if (param === 'me')
+      return {
+        user: { id: 'demo-user', email: 'demo@bigwealth.app', name: 'Demo', createdAt: now() },
+      } as T
     notFound('Endpoint')
   }
 
   // Accounts ----------------------------------------------------------------
   if (resource === 'accounts') {
-    if (method === 'GET') return { items: accounts } as T
+    if (method === 'GET') return { items: accounts.map(withCurrentBalance) } as T
     if (method === 'POST') {
-      const a: Account = {
+      const a: StoredAccount = {
         id: id(),
         name: String(body?.name ?? ''),
         institution: (body?.institution as string)?.trim() ? String(body?.institution) : null,
@@ -133,12 +154,12 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         createdAt: now(),
       }
       accounts = [...accounts, a]
-      return a as T
+      return withCurrentBalance(a) as T
     }
     const acc = accounts.find((x) => x.id === param)
     if (!acc) notFound('Account')
     if (method === 'PATCH') {
-      const updated: Account = {
+      const updated: StoredAccount = {
         ...acc,
         ...(body?.name !== undefined && { name: String(body.name) }),
         ...(body?.institution !== undefined && {
@@ -149,12 +170,49 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         ...(body?.balance !== undefined && { balance: Number(body.balance) }),
       }
       accounts = accounts.map((x) => (x.id === param ? updated : x))
-      return updated as T
+      return withCurrentBalance(updated) as T
     }
     if (method === 'DELETE') {
       accounts = accounts.filter((x) => x.id !== param)
       return undefined as T
     }
+  }
+
+  // Dashboard ----------------------------------------------------------------
+  if (resource === 'dashboard' && param === 'summary' && method === 'GET') {
+    let totalAssets = 0
+    let totalDebt = 0
+    for (const a of accounts.map(withCurrentBalance)) {
+      if (a.type === 'debt') totalDebt += a.currentBalance
+      else totalAssets += a.currentBalance
+    }
+    // Last 6 calendar months (UTC), oldest first, zero-filled — mirrors the server.
+    const months = 6
+    const start = (back: number) => {
+      const d = new Date()
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1))
+    }
+    const cashFlow: MonthCashFlow[] = Array.from({ length: months }, (_, i) => ({
+      month: start(months - 1 - i).toISOString().slice(0, 7),
+      income: 0,
+      expense: 0,
+    }))
+    const byMonth = new Map(cashFlow.map((m) => [m.month, m]))
+    for (const t of transactions) {
+      const bucket = byMonth.get(t.date.slice(0, 7))
+      if (!bucket) continue
+      if (t.type === 'income') bucket.income += t.amount
+      else bucket.expense += t.amount
+    }
+    const current = cashFlow[cashFlow.length - 1]
+    const summary: DashboardSummary = {
+      netWorth: totalAssets - totalDebt,
+      totalAssets,
+      totalDebt,
+      monthDelta: current.income - current.expense,
+      cashFlow,
+    }
+    return summary as T
   }
 
   // Categories --------------------------------------------------------------

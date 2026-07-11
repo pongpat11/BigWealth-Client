@@ -40,7 +40,7 @@ function formatMoney(amount: number, currency: Currency) {
 
 /** A debt balance counts against net worth; everything else adds to it. */
 function signedBalance(a: Account): number {
-  return a.type === 'debt' ? -a.balance : a.balance
+  return a.type === 'debt' ? -a.currentBalance : a.currentBalance
 }
 
 function AccountForm({
@@ -147,7 +147,7 @@ function AccountForm({
             <div className="flex-1">
               <Input
                 id="account-balance"
-                label={type === 'debt' ? 'Amount owed' : 'Balance'}
+                label={type === 'debt' ? 'Starting amount owed' : 'Starting balance'}
                 inputMode="decimal"
                 placeholder="0"
                 value={balance}
@@ -198,7 +198,7 @@ function AccountRow({
 }) {
   const [armed, setArmed] = useState(false)
   const isDebt = account.type === 'debt'
-  const shown = isDebt ? -account.balance : account.balance
+  const shown = isDebt ? -account.currentBalance : account.currentBalance
 
   return (
     <div className="flex items-center justify-between gap-3 py-3">
