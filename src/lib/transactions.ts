@@ -18,6 +18,12 @@ export interface TransactionCategory {
   color: string | null
 }
 
+export interface TransactionAccount {
+  id: string
+  name: string
+  type: 'cash' | 'bank' | 'investment' | 'debt'
+}
+
 export interface Transaction {
   id: string
   type: 'income' | 'expense'
@@ -27,6 +33,8 @@ export interface Transaction {
   subCategoryId: string | null
   category: TransactionCategory | null
   subCategory: TransactionCategory | null
+  accountId: string | null
+  account: TransactionAccount | null
   note: string | null
   date: string
   timezone: string | null
@@ -40,6 +48,7 @@ export interface TransactionInput {
   currency: Currency
   categoryId: string
   subCategoryId?: string
+  accountId?: string
   note?: string
   date: string // full ISO timestamp
   timezone: string // IANA, e.g. "Asia/Bangkok"

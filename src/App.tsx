@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
+import { Accounts } from '@/pages/Accounts'
 import { Categories } from '@/pages/Categories'
 import { ComingSoon } from '@/pages/ComingSoon'
 import { Dashboard } from '@/pages/Dashboard'
@@ -27,7 +28,7 @@ function App() {
           <Route path="/goals" element={<ComingSoon title="Savings Goals" />} />
           <Route path="/debts" element={<ComingSoon title="Debts" />} />
           <Route path="/reports" element={<ComingSoon title="Reports" />} />
-          <Route path="/accounts" element={<ComingSoon title="Accounts" />} />
+          <Route path="/accounts" element={<Accounts />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />
         </Route>
       </Route>

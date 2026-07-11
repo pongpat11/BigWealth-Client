@@ -5,6 +5,7 @@ import { Transactions } from './Transactions'
 import * as api from '@/lib/transactions'
 import * as labelsApi from '@/lib/labels'
 import * as categoriesApi from '@/lib/categories'
+import * as accountsApi from '@/lib/accounts'
 
 vi.mock('@/lib/transactions', () => ({
   listTransactions: vi.fn(),
@@ -15,6 +16,17 @@ vi.mock('@/lib/transactions', () => ({
 
 vi.mock('@/lib/labels', () => ({ listLabels: vi.fn() }))
 vi.mock('@/lib/categories', () => ({ listCategories: vi.fn() }))
+vi.mock('@/lib/accounts', () => ({ listAccounts: vi.fn() }))
+
+const kbank = {
+  id: 'kbank',
+  name: 'KBank Savings',
+  institution: 'Kasikornbank',
+  type: 'bank' as const,
+  currency: 'THB' as const,
+  balance: 50000,
+  createdAt: new Date().toISOString(),
+}
 
 const foodCategory = {
   id: 'food',
@@ -35,6 +47,8 @@ const sample = {
   subCategoryId: null,
   category: { id: 'food', name: 'Food & Dining', kind: 'expense' as const, icon: 'UtensilsCrossed', color: '#f59e0b' },
   subCategory: null,
+  accountId: null,
+  account: null,
   note: 'Lunch — som tam',
   date: new Date().toISOString(),
   timezone: 'Asia/Bangkok',
@@ -47,6 +61,7 @@ describe('Transactions page', () => {
     vi.clearAllMocks()
     vi.mocked(labelsApi.listLabels).mockResolvedValue([])
     vi.mocked(categoriesApi.listCategories).mockResolvedValue([foodCategory])
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([])
   })
 
   it('renders fetched transactions with their category', async () => {
@@ -142,6 +157,35 @@ describe('Transactions page', () => {
     await waitFor(() =>
       expect(api.createTransaction).toHaveBeenCalledWith(
         expect.objectContaining({ labelIds: ['l1'] }),
+      ),
+    )
+  })
+
+  it('shows the account name on a transaction row', async () => {
+    vi.mocked(api.listTransactions).mockResolvedValue([
+      { ...sample, accountId: 'kbank', account: { id: 'kbank', name: 'KBank Savings', type: 'bank' } },
+    ])
+    render(<Transactions />)
+    expect(await screen.findByText(/KBank Savings/)).toBeInTheDocument()
+  })
+
+  it('selects an account in the form and includes it when saving', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
+    vi.mocked(api.listTransactions).mockResolvedValue([])
+    vi.mocked(api.createTransaction).mockResolvedValue({ ...sample, id: '2', note: 'Coffee' })
+    const user = userEvent.setup()
+    render(<Transactions />)
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText(/amount/i), '120')
+    await user.selectOptions(await screen.findByLabelText('Category'), 'food')
+    await user.selectOptions(await screen.findByLabelText(/account/i), 'kbank')
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+
+    await waitFor(() =>
+      expect(api.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 'kbank' }),
       ),
     )
   })
