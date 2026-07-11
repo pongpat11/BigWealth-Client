@@ -193,7 +193,9 @@ function TransactionForm({
                 className={
                   'flex-1 rounded-xl py-2 text-sm font-semibold capitalize transition-colors ' +
                   (type === t
-                    ? 'bg-brand-600 text-white'
+                    ? t === 'expense'
+                      ? 'bg-[var(--color-loss)] text-white'
+                      : 'bg-[var(--color-gain)] text-white'
                     : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
                 }
               >
