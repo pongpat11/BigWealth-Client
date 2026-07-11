@@ -13,6 +13,7 @@ import {
   toDateTimeLocalValue,
 } from '@/lib/format'
 import { ApiError } from '@/lib/api'
+import { listAccounts, type Account } from '@/lib/accounts'
 import { listCategories, type Category } from '@/lib/categories'
 import { listLabels, type Label } from '@/lib/labels'
 import {
@@ -56,6 +57,7 @@ function TransactionForm({
   )
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
   const [subCategoryId, setSubCategoryId] = useState(initial?.subCategoryId ?? '')
+  const [accountId, setAccountId] = useState(initial?.accountId ?? '')
   const [dateTime, setDateTime] = useState(
     initial ? toDateTimeLocalValue(initial.date) : nowDateTimeLocalValue(),
   )
@@ -64,6 +66,7 @@ function TransactionForm({
   const [saving, setSaving] = useState(false)
   const [armed, setArmed] = useState(false) // two-tap delete confirm
   const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [labels, setLabels] = useState<Label[]>([])
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>(
     initial?.labels.map((l) => l.id) ?? [],
@@ -74,6 +77,9 @@ function TransactionForm({
     let active = true
     listCategories()
       .then((rows) => active && setCategories(rows))
+      .catch(() => undefined)
+    listAccounts()
+      .then((rows) => active && setAccounts(rows))
       .catch(() => undefined)
     listLabels()
       .then((rows) => active && setLabels(rows))
@@ -135,6 +141,7 @@ function TransactionForm({
       currency,
       categoryId,
       subCategoryId: subCategoryId || undefined,
+      accountId: accountId || undefined,
       note: note.trim() || undefined,
       date: new Date(dateTime).toISOString(),
       timezone,
@@ -263,6 +270,28 @@ function TransactionForm({
             </div>
           )}
 
+          {accounts.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="account" className="text-[13px] font-medium text-[var(--color-muted)]">
+                Account (optional)
+              </label>
+              <select
+                id="account"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">None</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                    {a.institution ? ` · ${a.institution}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {labels.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-[13px] font-medium text-[var(--color-muted)]">Labels</span>
@@ -362,7 +391,8 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
           {tx.note || categoryLabel}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
-          {categoryLabel} · {formatDateTime(tx.date, tx.timezone)}
+          {categoryLabel}
+          {tx.account ? ` · ${tx.account.name}` : ''} · {formatDateTime(tx.date, tx.timezone)}
         </p>
         {tx.labels.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
