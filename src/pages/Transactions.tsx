@@ -433,7 +433,7 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
       <span
         className={
           'tnum shrink-0 text-sm font-semibold ' +
-          (positive ? 'text-[var(--color-gain)]' : 'text-[var(--color-ink)]')
+          (positive ? 'text-[var(--color-gain)]' : 'text-[var(--color-loss)]')
         }
       >
         {positive ? '+' : '−'}
