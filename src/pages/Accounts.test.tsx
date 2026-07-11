@@ -18,6 +18,7 @@ const savings = {
   type: 'bank' as const,
   currency: 'THB' as const,
   balance: 50000,
+  currentBalance: 50000,
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 const wallet = {
@@ -27,6 +28,7 @@ const wallet = {
   type: 'cash' as const,
   currency: 'THB' as const,
   balance: 2000,
+  currentBalance: 2000,
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 const loan = {
@@ -36,6 +38,7 @@ const loan = {
   type: 'debt' as const,
   currency: 'THB' as const,
   balance: 12000,
+  currentBalance: 12000,
   createdAt: '2026-07-01T00:00:00.000Z',
 }
 
@@ -58,6 +61,16 @@ describe('Accounts page', () => {
     expect(screen.getByText(/฿40,000/)).toBeInTheDocument()
   })
 
+  it('shows currentBalance (transactions applied), not the starting balance', async () => {
+    vi.mocked(api.listAccounts).mockResolvedValue([
+      { ...wallet, balance: 2000, currentBalance: 1755 },
+    ])
+    render(<Accounts />)
+    // Shown on the row (and, with one account, the net-worth total) — never the starting 2,000.
+    expect((await screen.findAllByText(/฿1,755/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/฿2,000/)).not.toBeInTheDocument()
+  })
+
   it('shows an empty state when there are no accounts', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([])
     render(<Accounts />)
@@ -73,6 +86,7 @@ describe('Accounts page', () => {
       type: 'bank',
       currency: 'THB',
       balance: 1000,
+      currentBalance: 1000,
       createdAt: '2026-07-11T00:00:00.000Z',
     })
     const user = userEvent.setup()
@@ -82,7 +96,7 @@ describe('Accounts page', () => {
     await user.click(screen.getByRole('button', { name: /^new$/i }))
     await user.type(screen.getByLabelText(/^name$/i), 'Bangkok Bank')
     await user.type(screen.getByLabelText(/institution/i), 'BBL')
-    await user.type(screen.getByLabelText(/^balance$/i), '1000')
+    await user.type(screen.getByLabelText(/starting balance/i), '1000')
     await user.click(screen.getByRole('button', { name: /add account/i }))
 
     await waitFor(() =>
