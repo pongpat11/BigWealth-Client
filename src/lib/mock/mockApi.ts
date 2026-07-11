@@ -4,6 +4,7 @@
 import { ApiError } from '../api'
 import type { Account } from '../accounts'
 import type { Category } from '../categories'
+import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Label } from '../labels'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -132,6 +133,10 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       } as T
     if (param === 'refresh') return tokens() as T
     if (param === 'logout') return undefined as T
+    if (param === 'me')
+      return {
+        user: { id: 'demo-user', email: 'demo@bigwealth.app', name: 'Demo', createdAt: now() },
+      } as T
     notFound('Endpoint')
   }
 
@@ -171,6 +176,43 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       accounts = accounts.filter((x) => x.id !== param)
       return undefined as T
     }
+  }
+
+  // Dashboard ----------------------------------------------------------------
+  if (resource === 'dashboard' && param === 'summary' && method === 'GET') {
+    let totalAssets = 0
+    let totalDebt = 0
+    for (const a of accounts.map(withCurrentBalance)) {
+      if (a.type === 'debt') totalDebt += a.currentBalance
+      else totalAssets += a.currentBalance
+    }
+    // Last 6 calendar months (UTC), oldest first, zero-filled — mirrors the server.
+    const months = 6
+    const start = (back: number) => {
+      const d = new Date()
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - back, 1))
+    }
+    const cashFlow: MonthCashFlow[] = Array.from({ length: months }, (_, i) => ({
+      month: start(months - 1 - i).toISOString().slice(0, 7),
+      income: 0,
+      expense: 0,
+    }))
+    const byMonth = new Map(cashFlow.map((m) => [m.month, m]))
+    for (const t of transactions) {
+      const bucket = byMonth.get(t.date.slice(0, 7))
+      if (!bucket) continue
+      if (t.type === 'income') bucket.income += t.amount
+      else bucket.expense += t.amount
+    }
+    const current = cashFlow[cashFlow.length - 1]
+    const summary: DashboardSummary = {
+      netWorth: totalAssets - totalDebt,
+      totalAssets,
+      totalDebt,
+      monthDelta: current.income - current.expense,
+      cashFlow,
+    }
+    return summary as T
   }
 
   // Categories --------------------------------------------------------------
