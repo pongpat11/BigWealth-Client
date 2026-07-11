@@ -25,6 +25,7 @@ const kbank = {
   type: 'bank' as const,
   currency: 'THB' as const,
   balance: 50000,
+  currentBalance: 50000,
   createdAt: new Date().toISOString(),
 }
 

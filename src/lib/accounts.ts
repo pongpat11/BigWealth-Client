@@ -12,7 +12,10 @@ export interface Account {
   institution: string | null
   type: AccountType
   currency: Currency
+  /** Starting balance entered at setup. */
   balance: number
+  /** Starting balance ± this account's transactions (what to display). */
+  currentBalance: number
   createdAt: string
 }
 
