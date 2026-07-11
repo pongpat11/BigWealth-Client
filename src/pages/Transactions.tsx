@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { CreditCard, Landmark, Plus, TrendingUp, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -23,10 +23,18 @@ import {
   updateTransaction,
   type Currency,
   type Transaction,
+  type TransactionAccount,
 } from '@/lib/transactions'
 
 const CURRENCIES: Currency[] = ['THB', 'USD']
 const FALLBACK_COLOR = '#94a3b8'
+
+const ACCOUNT_ICON: Record<TransactionAccount['type'], typeof Wallet> = {
+  cash: Wallet,
+  bank: Landmark,
+  investment: TrendingUp,
+  debt: CreditCard,
+}
 
 function formatMoney(amount: number, currency: string) {
   if (currency === 'THB') return formatTHB(amount)
@@ -391,11 +399,20 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
           {tx.note || categoryLabel}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
-          {categoryLabel}
-          {tx.account ? ` · ${tx.account.name}` : ''} · {formatDateTime(tx.date, tx.timezone)}
+          {categoryLabel} · {formatDateTime(tx.date, tx.timezone)}
         </p>
-        {tx.labels.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
+        {(tx.account || tx.labels.length > 0) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {tx.account &&
+              (() => {
+                const AccIcon = ACCOUNT_ICON[tx.account.type]
+                return (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-canvas)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted)]">
+                    <AccIcon size={11} aria-hidden />
+                    {tx.account.name}
+                  </span>
+                )
+              })()}
             {tx.labels.map((l) => (
               <span
                 key={l.id}
