@@ -8,6 +8,7 @@ import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
+import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
 const now = () => new Date().toISOString()
@@ -306,6 +307,62 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       budgets = budgets.filter((x) => x.id !== param)
       return undefined as T
     }
+  }
+
+  // Reports -----------------------------------------------------------------
+  if (resource === 'reports' && param === 'summary' && method === 'GET') {
+    const range = (new URLSearchParams(path.split('?')[1] ?? '').get('range') ?? '3M') as ReportRange
+    const today = new Date()
+    const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const count = range === '1M' ? 1 : range === '3M' ? 3 : range === '1Y' ? 12 : today.getMonth() + 1
+    const keys = Array.from({ length: count }, (_, i) =>
+      key(new Date(today.getFullYear(), today.getMonth() - (count - 1 - i), 1)),
+    )
+    const months = keys.map((month) => ({ month, income: 0, expense: 0, netWorth: 0 }))
+    const byKey = new Map(months.map((m) => [m.month, m]))
+    const flow = new Map<string, number>()
+    const spend = new Map<string | null, number>()
+    for (const t of transactions) {
+      const k = key(new Date(t.date))
+      const signed = t.type === 'income' ? t.amount : -t.amount
+      const acc = accounts.find((a) => a.id === t.accountId)
+      if (acc && acc.currency === t.currency) flow.set(k, (flow.get(k) ?? 0) + signed)
+      const bucket = byKey.get(k)
+      if (!bucket || t.currency !== 'THB') continue
+      if (t.type === 'income') bucket.income += t.amount
+      else {
+        bucket.expense += t.amount
+        const root = rootCategoryId(t.categoryId)
+        spend.set(root, (spend.get(root) ?? 0) + t.amount)
+      }
+    }
+    // Walk back from today's net worth, as the server does.
+    let netWorth = accounts
+      .map(withCurrentBalance)
+      .reduce((s, a) => s + (a.type === 'debt' ? -a.currentBalance : a.currentBalance), 0)
+    for (const m of [...months].reverse()) {
+      m.netWorth = netWorth
+      netWorth -= flow.get(m.month) ?? 0
+    }
+    const report: Report = {
+      range,
+      months,
+      totalIncome: months.reduce((s, m) => s + m.income, 0),
+      totalExpense: months.reduce((s, m) => s + m.expense, 0),
+      spendingByCategory: [...spend.entries()]
+        .map(([categoryId, amount]) => {
+          const c = categories.find((x) => x.id === categoryId)
+          return {
+            categoryId: c?.id ?? null,
+            name: c?.name ?? 'Uncategorized',
+            icon: c?.icon ?? null,
+            color: c?.color ?? null,
+            amount,
+          }
+        })
+        .sort((a, b) => b.amount - a.amount),
+    }
+    return report as T
   }
 
   // Goals -------------------------------------------------------------------

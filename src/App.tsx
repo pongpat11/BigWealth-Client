@@ -11,6 +11,7 @@ import { Goals } from '@/pages/Goals'
 import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
+import { Reports } from '@/pages/Reports'
 import { Transactions } from '@/pages/Transactions'
 
 // Every app screen requires a session (RequireAuth). Unauthenticated visitors
@@ -30,7 +31,7 @@ function App() {
           <Route path="/more" element={<More />} />
           <Route path="/goals" element={<Goals />} />
           <Route path="/debts" element={<Debts />} />
-          <Route path="/reports" element={<ComingSoon title="Reports" />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />
         </Route>
