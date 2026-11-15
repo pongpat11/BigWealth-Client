@@ -59,6 +59,44 @@ function auth() {
   return { token: getAccessToken() ?? undefined }
 }
 
+export interface TransactionFilters {
+  type?: 'income' | 'expense'
+  accountId?: string
+  /** Matches the category or the sub-category. */
+  categoryId?: string
+  labelId?: string
+  /** ISO instants: `from` inclusive, `to` exclusive. */
+  from?: string
+  to?: string
+  /** Case-insensitive note search. */
+  q?: string
+}
+
+export interface TransactionPage {
+  items: Transaction[]
+  /** Pass to the next call to continue; null when there are no more. */
+  nextCursor: string | null
+}
+
+/** One page of transactions, newest first, narrowed by `filters`. */
+export async function listTransactionPage(
+  filters: TransactionFilters = {},
+  cursor?: string,
+  limit = 50,
+): Promise<TransactionPage> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value)
+  }
+  if (cursor) params.set('cursor', cursor)
+  const page = await apiFetch<Partial<TransactionPage> & { items: Transaction[] }>(
+    `/transactions?${params}`,
+    auth(),
+  )
+  return { items: page.items, nextCursor: page.nextCursor ?? null }
+}
+
+/** The most recent transactions (first page, unfiltered). */
 export async function listTransactions(): Promise<Transaction[]> {
   const { items } = await apiFetch<{ items: Transaction[] }>('/transactions', auth())
   return items
