@@ -16,6 +16,10 @@ export interface Account {
   balance: number
   /** Starting balance ± this account's transactions (what to display). */
   currentBalance: number
+  /** Loan details for debt accounts. Absent/null when not set. */
+  interestRate?: number | null // annual %
+  minPayment?: number | null // per month
+  originalAmount?: number | null // amount borrowed
   createdAt: string
 }
 
@@ -25,6 +29,9 @@ export interface NewAccount {
   institution?: string
   currency?: Currency
   balance?: number
+  interestRate?: number | null
+  minPayment?: number | null
+  originalAmount?: number | null
 }
 
 export interface AccountEdit {
@@ -33,6 +40,9 @@ export interface AccountEdit {
   institution?: string
   currency?: Currency
   balance?: number
+  interestRate?: number | null
+  minPayment?: number | null
+  originalAmount?: number | null
 }
 
 function auth() {

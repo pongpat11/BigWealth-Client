@@ -43,7 +43,9 @@ let accounts: StoredAccount[] = [
   { id: 'settrade', name: 'SET Brokerage', institution: 'Settrade', type: 'investment', currency: 'THB', balance: 612_000, createdAt: daysAgo(90) },
   { id: 'ibkr', name: 'IBKR (US)', institution: 'Interactive Brokers', type: 'investment', currency: 'USD', balance: 14_850, createdAt: daysAgo(60) },
   // Debt balance is stored positive (amount owed); the UI renders it negative.
-  { id: 'card', name: 'KBank Credit Card', institution: 'Kasikornbank', type: 'debt', currency: 'THB', balance: 32_500, createdAt: daysAgo(100) },
+  { id: 'card', name: 'KBank Credit Card', institution: 'Kasikornbank', type: 'debt', currency: 'THB', balance: 32_500, interestRate: 16, minPayment: 3_250, originalAmount: null, createdAt: daysAgo(100) },
+  { id: 'car', name: 'Car Loan', institution: 'TTB', type: 'debt', currency: 'THB', balance: 285_000, interestRate: 3.2, minPayment: 8_900, originalAmount: 480_000, createdAt: daysAgo(95) },
+  { id: 'student', name: 'Student Loan (กยศ.)', institution: null, type: 'debt', currency: 'THB', balance: 84_000, interestRate: 1, minPayment: 1_500, originalAmount: 120_000, createdAt: daysAgo(94) },
 ]
 
 function txCategory(catId: string | null): TransactionCategory | null {
@@ -199,6 +201,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         type: body?.type as Account['type'],
         currency: (body?.currency as Account['currency']) ?? 'THB',
         balance: Number(body?.balance ?? 0),
+        interestRate: (body?.interestRate as number | null) ?? null,
+        minPayment: (body?.minPayment as number | null) ?? null,
+        originalAmount: (body?.originalAmount as number | null) ?? null,
         createdAt: now(),
       }
       accounts = [...accounts, a]
@@ -216,6 +221,11 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         ...(body?.type !== undefined && { type: body.type as Account['type'] }),
         ...(body?.currency !== undefined && { currency: body.currency as Account['currency'] }),
         ...(body?.balance !== undefined && { balance: Number(body.balance) }),
+        ...(body?.interestRate !== undefined && { interestRate: body.interestRate as number | null }),
+        ...(body?.minPayment !== undefined && { minPayment: body.minPayment as number | null }),
+        ...(body?.originalAmount !== undefined && {
+          originalAmount: body.originalAmount as number | null,
+        }),
       }
       accounts = accounts.map((x) => (x.id === param ? updated : x))
       return withCurrentBalance(updated) as T
