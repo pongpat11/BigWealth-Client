@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
 import { Accounts } from '@/pages/Accounts'
@@ -11,6 +11,7 @@ import { Goals } from '@/pages/Goals'
 import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
+import { NotFound } from '@/pages/NotFound'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
@@ -35,9 +36,9 @@ function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
 }

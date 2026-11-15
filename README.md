@@ -55,6 +55,14 @@ The UI is designed in Figma; the spec is in [`docs/DESIGN_SPEC.md`](docs/DESIGN_
 Token values there match `src/index.css` so the app and the Figma file stay in sync.
 The `figma-plugin/` folder can regenerate the screens in Figma.
 
+## PWA
+
+The app is installable (Safari → Share → Add to Home Screen). `public/manifest.webmanifest`
+and the icons define the installed app; `public/sw.js` caches the app shell so it
+opens offline. API responses are never cached, so offline you see the shell plus an
+"offline" banner rather than stale balances. The service worker only registers in
+production builds.
+
 ## CI
 
 - **GitHub Actions** — `.github/workflows/ci.yml` (install → lint → test → build on push/PR)
