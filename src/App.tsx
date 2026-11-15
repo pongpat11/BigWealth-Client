@@ -6,6 +6,7 @@ import { Budgets } from '@/pages/Budgets'
 import { Categories } from '@/pages/Categories'
 import { ComingSoon } from '@/pages/ComingSoon'
 import { Dashboard } from '@/pages/Dashboard'
+import { Goals } from '@/pages/Goals'
 import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
@@ -26,7 +27,7 @@ function App() {
           <Route path="/portfolio" element={<ComingSoon title="Portfolio" />} />
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/more" element={<More />} />
-          <Route path="/goals" element={<ComingSoon title="Savings Goals" />} />
+          <Route path="/goals" element={<Goals />} />
           <Route path="/debts" element={<ComingSoon title="Debts" />} />
           <Route path="/reports" element={<ComingSoon title="Reports" />} />
           <Route path="/accounts" element={<Accounts />} />

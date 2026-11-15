@@ -6,6 +6,7 @@ import type { Account } from '../accounts'
 import type { Budget, BudgetOverview } from '../budgets'
 import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
+import type { Goal } from '../goals'
 import type { Label } from '../labels'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -146,6 +147,14 @@ function withSpent(b: (typeof budgets)[number], month: string): Budget {
   }
 }
 
+const dateIn = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+
+let goals: Goal[] = [
+  { id: 'g-macbook', name: 'New MacBook', target: 75_000, saved: 71_000, deadline: dateIn(60), createdAt: daysAgo(200) },
+  { id: 'g-emergency', name: 'Emergency Fund', target: 300_000, saved: 210_000, deadline: null, createdAt: daysAgo(400) },
+  { id: 'g-japan', name: 'Japan Trip', target: 60_000, saved: 60_000, deadline: dateIn(-20), createdAt: daysAgo(300) },
+]
+
 // --- Request helpers --------------------------------------------------------
 
 type Body = Record<string, unknown> | undefined
@@ -285,6 +294,34 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       budgets = budgets.filter((x) => x.id !== param)
+      return undefined as T
+    }
+  }
+
+  // Goals -------------------------------------------------------------------
+  if (resource === 'goals') {
+    if (method === 'GET') return { items: goals } as T
+    const fromBody = (base: Goal): Goal => ({
+      ...base,
+      ...(body?.name !== undefined && { name: String(body.name) }),
+      ...(body?.target !== undefined && { target: Number(body.target) }),
+      ...(body?.saved !== undefined && { saved: Number(body.saved) }),
+      ...(body?.deadline !== undefined && { deadline: (body.deadline as string | null) ?? null }),
+    })
+    if (method === 'POST') {
+      const g = fromBody({ id: id(), name: '', target: 0, saved: 0, deadline: null, createdAt: now() })
+      goals = [...goals, g]
+      return g as T
+    }
+    const goal = goals.find((x) => x.id === param)
+    if (!goal) notFound('Goal')
+    if (method === 'PATCH') {
+      const updated = fromBody(goal)
+      goals = goals.map((x) => (x.id === param ? updated : x))
+      return updated as T
+    }
+    if (method === 'DELETE') {
+      goals = goals.filter((x) => x.id !== param)
       return undefined as T
     }
   }
