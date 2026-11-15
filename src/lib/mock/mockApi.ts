@@ -3,6 +3,7 @@
 // in module memory: create/edit/delete persist until the page is reloaded.
 import { ApiError } from '../api'
 import type { Account } from '../accounts'
+import type { Budget, BudgetOverview } from '../budgets'
 import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Label } from '../labels'
@@ -106,6 +107,44 @@ let transactions: Transaction[] = txSeeds.map((s) => ({
     return { id: l.id, name: l.name, color: l.color }
   }),
 }))
+
+// Budgets store only the limit; `spent` is derived from transactions on read.
+let budgets: { id: string; categoryId: string; limit: number }[] = [
+  { id: 'b-food', categoryId: 'food', limit: 12_000 },
+  { id: 'b-transport', categoryId: 'transport', limit: 3_000 },
+  { id: 'b-bills', categoryId: 'bills', limit: 3_000 },
+]
+
+/** Top-level category a transaction counts against (sub-categories roll up). */
+function rootCategoryId(catId: string | null): string | null {
+  const c = categories.find((x) => x.id === catId)
+  return c ? (c.parentId ?? c.id) : null
+}
+
+function withSpent(b: (typeof budgets)[number], month: string): Budget {
+  const c = categories.find((x) => x.id === b.categoryId)
+  const spent = transactions
+    .filter(
+      (t) =>
+        t.type === 'expense' &&
+        t.currency === 'THB' &&
+        rootCategoryId(t.categoryId) === b.categoryId &&
+        t.date.slice(0, 7) === month,
+    )
+    .reduce((s, t) => s + t.amount, 0)
+  return {
+    id: b.id,
+    categoryId: b.categoryId,
+    category: {
+      id: b.categoryId,
+      name: c?.name ?? 'Unknown',
+      icon: c?.icon ?? null,
+      color: c?.color ?? null,
+    },
+    limit: b.limit,
+    spent,
+  }
+}
 
 // --- Request helpers --------------------------------------------------------
 
@@ -213,6 +252,41 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       cashFlow,
     }
     return summary as T
+  }
+
+  // Budgets -----------------------------------------------------------------
+  if (resource === 'budgets') {
+    const month =
+      new URLSearchParams(path.split('?')[1] ?? '').get('month') ?? now().slice(0, 7)
+    if (method === 'GET') {
+      const items = budgets.map((b) => withSpent(b, month))
+      const overview: BudgetOverview = {
+        month,
+        totalLimit: items.reduce((s, b) => s + b.limit, 0),
+        totalSpent: items.reduce((s, b) => s + b.spent, 0),
+        items,
+      }
+      return overview as T
+    }
+    if (method === 'POST') {
+      const categoryId = String(body?.categoryId ?? '')
+      if (budgets.some((b) => b.categoryId === categoryId))
+        throw new ApiError(409, 'This category already has a budget')
+      const b = { id: id(), categoryId, limit: Number(body?.limit ?? 0) }
+      budgets = [...budgets, b]
+      return withSpent(b, month) as T
+    }
+    const existing = budgets.find((x) => x.id === param)
+    if (!existing) notFound('Budget')
+    if (method === 'PATCH') {
+      const updated = { ...existing, limit: Number(body?.limit ?? existing.limit) }
+      budgets = budgets.map((x) => (x.id === param ? updated : x))
+      return withSpent(updated, month) as T
+    }
+    if (method === 'DELETE') {
+      budgets = budgets.filter((x) => x.id !== param)
+      return undefined as T
+    }
   }
 
   // Categories --------------------------------------------------------------

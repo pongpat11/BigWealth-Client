@@ -102,3 +102,23 @@ export function formatDateTime(iso: string, timeZone?: string | null): string {
     minute: '2-digit',
   })
 }
+
+/** 'YYYY-MM' for a date in the browser's timezone (defaults to now). */
+export function monthKey(date: Date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** 'YYYY-MM' shifted by `delta` months (negative = earlier). */
+export function shiftMonth(month: string, delta: number): string {
+  const [year, m] = month.split('-').map(Number)
+  return monthKey(new Date(year, m - 1 + delta, 1))
+}
+
+/** 'YYYY-MM' → "July 2026". */
+export function formatMonth(month: string): string {
+  const [year, m] = month.split('-').map(Number)
+  return new Date(year, m - 1, 1).toLocaleDateString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  })
+}
