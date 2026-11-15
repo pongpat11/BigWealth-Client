@@ -60,6 +60,32 @@ export async function me(): Promise<AuthUser> {
   return user
 }
 
+/** Set the display name; an empty name clears it. */
+export async function updateProfile(name: string): Promise<AuthUser> {
+  const { user } = await apiFetch<{ user: AuthUser }>('/auth/me', {
+    method: 'PATCH',
+    body: { name: name.trim() || null },
+    token: getAccessToken() ?? undefined,
+  })
+  return user
+}
+
+/**
+ * Change the password. The server signs out every other device and returns a
+ * fresh token pair, which replaces the stored one so this device stays in.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const data = await apiFetch<AuthTokens>('/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+    token: getAccessToken() ?? undefined,
+  })
+  storeTokens(data)
+}
+
 export async function logout(): Promise<void> {
   const refreshToken = localStorage.getItem(REFRESH_KEY)
   clearTokens()

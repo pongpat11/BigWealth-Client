@@ -12,6 +12,7 @@ import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
 import { Reports } from '@/pages/Reports'
+import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
 
 // Every app screen requires a session (RequireAuth). Unauthenticated visitors
@@ -33,7 +34,7 @@ function App() {
           <Route path="/debts" element={<Debts />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/accounts" element={<Accounts />} />
-          <Route path="/settings" element={<ComingSoon title="Settings" />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

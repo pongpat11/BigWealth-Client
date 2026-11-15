@@ -85,7 +85,7 @@ export function Login() {
               {error && (
                 <p
                   role="alert"
-                  className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]"
+                  className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]"
                 >
                   {error}
                 </p>

@@ -158,6 +158,8 @@ let goals: Goal[] = [
   { id: 'g-japan', name: 'Japan Trip', target: 60_000, saved: 60_000, deadline: dateIn(-20), createdAt: daysAgo(300) },
 ]
 
+let mockUserName: string | null = 'Demo'
+
 // --- Request helpers --------------------------------------------------------
 
 type Body = Record<string, unknown> | undefined
@@ -184,10 +186,13 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       } as T
     if (param === 'refresh') return tokens() as T
     if (param === 'logout') return undefined as T
-    if (param === 'me')
+    if (param === 'me') {
+      if (method === 'PATCH') mockUserName = (body?.name as string | null) ?? null
       return {
-        user: { id: 'demo-user', email: 'demo@bigwealth.app', name: 'Demo', createdAt: now() },
+        user: { id: 'demo-user', email: 'demo@bigwealth.app', name: mockUserName, createdAt: now() },
       } as T
+    }
+    if (param === 'change-password') return tokens() as T
     notFound('Endpoint')
   }
 

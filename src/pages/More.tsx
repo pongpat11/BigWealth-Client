@@ -65,7 +65,7 @@ export function More() {
             onClick={handleLogout}
             className="flex w-full items-center gap-3 py-3.5 text-sm font-medium text-[var(--color-loss)]"
           >
-            <span className="flex size-9 items-center justify-center rounded-full bg-rose-50 text-[var(--color-loss)]">
+            <span className="flex size-9 items-center justify-center rounded-full bg-rose-500/10 text-[var(--color-loss)]">
               <LogOut size={16} aria-hidden />
             </span>
             <span className="flex-1 text-left">Log out</span>

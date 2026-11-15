@@ -113,7 +113,7 @@ function GoalForm({
             {initial ? 'Edit goal' : 'New goal'}
           </p>
           {error && (
-            <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]">
+            <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
             </p>
           )}
@@ -170,7 +170,7 @@ function GoalForm({
               type="button"
               onClick={handleDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-50 disabled:opacity-50"
+              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
             >
               {armed ? 'Tap again to delete' : 'Delete goal'}
             </button>

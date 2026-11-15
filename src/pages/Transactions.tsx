@@ -170,7 +170,7 @@ function TransactionForm({
             {isEdit ? 'Edit transaction' : 'New transaction'}
           </p>
           {error && (
-            <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]">
+            <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
             </p>
           )}
@@ -360,7 +360,7 @@ function TransactionForm({
               type="button"
               onClick={handleDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-50 disabled:opacity-50"
+              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
             >
               {armed ? 'Tap again to delete' : 'Delete transaction'}
             </button>
@@ -640,7 +640,7 @@ export function Transactions() {
             className={
               'flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors ' +
               (filtersOpen || panelFilterCount > 0
-                ? 'border-brand-600 bg-brand-50 text-brand-700'
+                ? 'border-brand-600 bg-brand-500/10 text-brand-700'
                 : 'border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
             }
           >
