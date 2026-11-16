@@ -250,6 +250,45 @@ describe('Transactions page', () => {
     )
   })
 
+  it('drops a "Load more" page that arrives after the filters changed', async () => {
+    let resolveOld: (p: ReturnType<typeof page>) => void = () => undefined
+    vi.mocked(api.listTransactionPage).mockImplementation((_filters, cursor) => {
+      if (cursor) return new Promise((resolve) => (resolveOld = resolve))
+      return Promise.resolve(page([sample], '1'))
+    })
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /load more/i }))
+    await user.click(screen.getByRole('button', { name: 'Income' }))
+    await waitFor(() =>
+      expect(api.listTransactionPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: 'income' }),
+      ),
+    )
+
+    resolveOld(page([{ ...sample, id: 'stale', note: 'Stale expense' }]))
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByText('Stale expense')).not.toBeInTheDocument()
+  })
+
+  it('does not show a newly added row that the active filter excludes', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    vi.mocked(api.createTransaction).mockResolvedValue({ ...sample, id: '2', note: 'Coffee' })
+    const user = userEvent.setup()
+    renderPage('/transactions?type=income')
+    await screen.findByText(/no transactions match these filters/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText(/amount/i), '120')
+    await user.selectOptions(await screen.findByLabelText('Category'), 'food')
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+
+    await waitFor(() => expect(api.createTransaction).toHaveBeenCalled())
+    // Saved as an expense, so it stays out of the Income view.
+    expect(screen.queryByText('Coffee')).not.toBeInTheDocument()
+  })
+
   it('loads the next page and appends it', async () => {
     vi.mocked(api.listTransactionPage)
       .mockResolvedValueOnce(page([sample], '1'))
