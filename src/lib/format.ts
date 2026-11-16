@@ -48,7 +48,12 @@ export function formatSignedTHB(amount: number): string {
 
 /** Short date: 7 Jun (current year) or 7 Jun 25. */
 export function formatDate(iso: string): string {
-  const d = new Date(iso)
+  // A bare 'YYYY-MM-DD' is a calendar date, not an instant. `new Date()` would
+  // read it as UTC midnight and show the previous day west of UTC.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(iso)
   const now = new Date()
   const opts: Intl.DateTimeFormatOptions =
     d.getFullYear() === now.getFullYear()
