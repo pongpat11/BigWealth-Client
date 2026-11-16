@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -170,7 +170,7 @@ function TransactionForm({
             {isEdit ? 'Edit transaction' : 'New transaction'}
           </p>
           {error && (
-            <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]">
+            <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
             </p>
           )}
@@ -360,7 +360,7 @@ function TransactionForm({
               type="button"
               onClick={handleDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-50 disabled:opacity-50"
+              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
             >
               {armed ? 'Tap again to delete' : 'Delete transaction'}
             </button>
@@ -440,6 +440,24 @@ function dayStartIso(date: string, addDays = 0): string | undefined {
   return Number.isNaN(at.getTime()) ? undefined : at.toISOString()
 }
 
+/**
+ * Client-side mirror of the API filters, so a row added or edited in place only
+ * stays in the list when the server would have returned it for this view.
+ */
+function matchesFilters(tx: Transaction, f: TransactionFilters): boolean {
+  if (f.type && tx.type !== f.type) return false
+  if (f.accountId && tx.accountId !== f.accountId) return false
+  if (f.categoryId && tx.categoryId !== f.categoryId && tx.subCategoryId !== f.categoryId) {
+    return false
+  }
+  if (f.labelId && !tx.labels.some((l) => l.id === f.labelId)) return false
+  const at = new Date(tx.date).getTime()
+  if (f.from && at < new Date(f.from).getTime()) return false
+  if (f.to && at >= new Date(f.to).getTime()) return false
+  if (f.q && !(tx.note ?? '').toLowerCase().includes(f.q.toLowerCase())) return false
+  return true
+}
+
 /** Group consecutive rows (already newest-first) under a per-day heading. */
 function groupByDay(items: Transaction[]): { heading: string; rows: Transaction[] }[] {
   const groups: { heading: string; rows: Transaction[] }[] = []
@@ -508,7 +526,12 @@ export function Transactions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
+  // The filters the list currently shows; lets an in-flight "Load more" tell
+  // that the view changed underneath it.
+  const shownFilters = useRef(filters)
+
   useEffect(() => {
+    shownFilters.current = filters
     let active = true
     listTransactionPage(filters)
       .then((page) => {
@@ -544,12 +567,16 @@ export function Transactions() {
 
   async function loadMore() {
     if (!nextCursor) return
+    const requested = filters
     setLoadingMore(true)
     try {
-      const page = await listTransactionPage(filters, nextCursor)
+      const page = await listTransactionPage(requested, nextCursor)
+      // Filters changed while this page was loading: it belongs to the old view.
+      if (shownFilters.current !== requested) return
       setItems((prev) => [...(prev ?? []), ...page.items])
       setNextCursor(page.nextCursor)
     } catch (err) {
+      if (shownFilters.current !== requested) return
       setError(err instanceof ApiError ? err.message : 'Could not load more.')
     } finally {
       setLoadingMore(false)
@@ -566,10 +593,12 @@ export function Transactions() {
     setEditing(null)
   }
 
-  function handleSaved(saved: Transaction, isEdit: boolean) {
+  function handleSaved(saved: Transaction) {
+    const visible = matchesFilters(saved, filters)
     setItems((prev) => {
-      const list = prev ?? []
-      const next = isEdit ? list.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...list]
+      const list = (prev ?? []).filter((t) => t.id !== saved.id)
+      // A row that no longer fits the active filters drops out of the view.
+      const next = visible ? [saved, ...list] : list
       // Keep newest-first so the row lands under the right day.
       return [...next].sort((a, b) => b.date.localeCompare(a.date))
     })
@@ -640,7 +669,7 @@ export function Transactions() {
             className={
               'flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors ' +
               (filtersOpen || panelFilterCount > 0
-                ? 'border-brand-600 bg-brand-50 text-brand-700'
+                ? 'border-brand-600 bg-brand-500/10 text-brand-700'
                 : 'border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
             }
           >

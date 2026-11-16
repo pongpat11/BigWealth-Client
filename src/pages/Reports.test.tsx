@@ -88,6 +88,28 @@ describe('Reports page', () => {
     expect(screen.queryByText(/spending by category/i)).not.toBeInTheDocument()
   })
 
+  it('exports CSV without revoking the download URL before the browser reads it', async () => {
+    vi.mocked(api.getReport).mockResolvedValue(report)
+    const create = vi.fn(() => 'blob:report')
+    const revoke = vi.fn()
+    Object.assign(URL, { createObjectURL: create, revokeObjectURL: revoke })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    try {
+      render(<Reports />)
+      await user.click(await screen.findByRole('button', { name: /export csv/i }))
+
+      expect(click).toHaveBeenCalledTimes(1)
+      expect(revoke).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(60_000)
+      expect(revoke).toHaveBeenCalledWith('blob:report')
+    } finally {
+      vi.useRealTimers()
+      click.mockRestore()
+    }
+  })
+
   it('shows the API error', async () => {
     vi.mocked(api.getReport).mockRejectedValue(new Error('boom'))
     render(<Reports />)

@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
   BarChart3,
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
+import { ErrorBoundary } from './ErrorBoundary'
+import { OfflineBanner } from './OfflineBanner'
 
 // Primary tabs — shown in the mobile bottom bar and at the top of the sidebar.
 const primaryNav = [
@@ -55,7 +57,7 @@ function SidebarLink({
         cn(
           'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
           isActive
-            ? 'bg-brand-50 text-brand-700'
+            ? 'bg-brand-500/10 text-brand-700'
             : 'text-[var(--color-muted)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-ink)]',
         )
       }
@@ -100,6 +102,7 @@ function TabLink({
  */
 export function AppShell() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   async function handleLogout() {
     await logout()
@@ -139,7 +142,11 @@ export function AppShell() {
 
       {/* Content */}
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-8 lg:pt-6">
-        <Outlet />
+        <OfflineBanner />
+        {/* Keyed by path so a crashed screen clears when you navigate away. */}
+        <ErrorBoundary key={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
 
       {/* Mobile bottom tab bar */}

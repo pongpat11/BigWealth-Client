@@ -102,7 +102,7 @@ function AccountForm({
             {isEdit ? 'Edit account' : 'New account'}
           </p>
           {error && (
-            <p role="alert" className="rounded-xl bg-rose-50 px-3 py-2 text-sm text-[var(--color-loss)]">
+            <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
             </p>
           )}

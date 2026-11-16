@@ -44,8 +44,12 @@ function downloadCsv(report: Report) {
   const link = document.createElement('a')
   link.href = url
   link.download = `bigwealth-report-${report.range.toLowerCase()}.csv`
+  // Safari needs the link in the document, and fetches the blob after click()
+  // returns, so the URL must outlive this call.
+  document.body.appendChild(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'gain' | 'loss' }) {

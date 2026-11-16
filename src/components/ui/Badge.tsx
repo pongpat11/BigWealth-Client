@@ -5,8 +5,8 @@ type Tone = 'neutral' | 'gain' | 'loss' | 'gold' | 'brand'
 
 const tones: Record<Tone, string> = {
   neutral: 'bg-[var(--color-canvas)] text-[var(--color-muted)]',
-  gain: 'bg-brand-50 text-brand-700',
-  loss: 'bg-rose-50 text-rose-600',
+  gain: 'bg-brand-500/10 text-brand-700',
+  loss: 'bg-rose-500/10 text-rose-600',
   gold: 'bg-amber-50 text-amber-600',
   brand: 'bg-brand-600 text-white',
 }
