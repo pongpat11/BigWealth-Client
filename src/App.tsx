@@ -6,9 +6,12 @@ import { Budgets } from '@/pages/Budgets'
 import { Categories } from '@/pages/Categories'
 import { ComingSoon } from '@/pages/ComingSoon'
 import { Dashboard } from '@/pages/Dashboard'
+import { Debts } from '@/pages/Debts'
+import { Goals } from '@/pages/Goals'
 import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
+import { Reports } from '@/pages/Reports'
 import { Transactions } from '@/pages/Transactions'
 
 // Every app screen requires a session (RequireAuth). Unauthenticated visitors
@@ -26,9 +29,9 @@ function App() {
           <Route path="/portfolio" element={<ComingSoon title="Portfolio" />} />
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/more" element={<More />} />
-          <Route path="/goals" element={<ComingSoon title="Savings Goals" />} />
-          <Route path="/debts" element={<ComingSoon title="Debts" />} />
-          <Route path="/reports" element={<ComingSoon title="Reports" />} />
+          <Route path="/goals" element={<Goals />} />
+          <Route path="/debts" element={<Debts />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/settings" element={<ComingSoon title="Settings" />} />
         </Route>

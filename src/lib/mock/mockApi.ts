@@ -6,7 +6,9 @@ import type { Account } from '../accounts'
 import type { Budget, BudgetOverview } from '../budgets'
 import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
+import type { Goal } from '../goals'
 import type { Label } from '../labels'
+import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
 const now = () => new Date().toISOString()
@@ -42,7 +44,9 @@ let accounts: StoredAccount[] = [
   { id: 'settrade', name: 'SET Brokerage', institution: 'Settrade', type: 'investment', currency: 'THB', balance: 612_000, createdAt: daysAgo(90) },
   { id: 'ibkr', name: 'IBKR (US)', institution: 'Interactive Brokers', type: 'investment', currency: 'USD', balance: 14_850, createdAt: daysAgo(60) },
   // Debt balance is stored positive (amount owed); the UI renders it negative.
-  { id: 'card', name: 'KBank Credit Card', institution: 'Kasikornbank', type: 'debt', currency: 'THB', balance: 32_500, createdAt: daysAgo(100) },
+  { id: 'card', name: 'KBank Credit Card', institution: 'Kasikornbank', type: 'debt', currency: 'THB', balance: 32_500, interestRate: 16, minPayment: 3_250, originalAmount: null, createdAt: daysAgo(100) },
+  { id: 'car', name: 'Car Loan', institution: 'TTB', type: 'debt', currency: 'THB', balance: 285_000, interestRate: 3.2, minPayment: 8_900, originalAmount: 480_000, createdAt: daysAgo(95) },
+  { id: 'student', name: 'Student Loan (กยศ.)', institution: null, type: 'debt', currency: 'THB', balance: 84_000, interestRate: 1, minPayment: 1_500, originalAmount: 120_000, createdAt: daysAgo(94) },
 ]
 
 function txCategory(catId: string | null): TransactionCategory | null {
@@ -146,6 +150,14 @@ function withSpent(b: (typeof budgets)[number], month: string): Budget {
   }
 }
 
+const dateIn = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
+
+let goals: Goal[] = [
+  { id: 'g-macbook', name: 'New MacBook', target: 75_000, saved: 71_000, deadline: dateIn(60), createdAt: daysAgo(200) },
+  { id: 'g-emergency', name: 'Emergency Fund', target: 300_000, saved: 210_000, deadline: null, createdAt: daysAgo(400) },
+  { id: 'g-japan', name: 'Japan Trip', target: 60_000, saved: 60_000, deadline: dateIn(-20), createdAt: daysAgo(300) },
+]
+
 // --- Request helpers --------------------------------------------------------
 
 type Body = Record<string, unknown> | undefined
@@ -190,6 +202,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         type: body?.type as Account['type'],
         currency: (body?.currency as Account['currency']) ?? 'THB',
         balance: Number(body?.balance ?? 0),
+        interestRate: (body?.interestRate as number | null) ?? null,
+        minPayment: (body?.minPayment as number | null) ?? null,
+        originalAmount: (body?.originalAmount as number | null) ?? null,
         createdAt: now(),
       }
       accounts = [...accounts, a]
@@ -207,6 +222,11 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         ...(body?.type !== undefined && { type: body.type as Account['type'] }),
         ...(body?.currency !== undefined && { currency: body.currency as Account['currency'] }),
         ...(body?.balance !== undefined && { balance: Number(body.balance) }),
+        ...(body?.interestRate !== undefined && { interestRate: body.interestRate as number | null }),
+        ...(body?.minPayment !== undefined && { minPayment: body.minPayment as number | null }),
+        ...(body?.originalAmount !== undefined && {
+          originalAmount: body.originalAmount as number | null,
+        }),
       }
       accounts = accounts.map((x) => (x.id === param ? updated : x))
       return withCurrentBalance(updated) as T
@@ -285,6 +305,90 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       budgets = budgets.filter((x) => x.id !== param)
+      return undefined as T
+    }
+  }
+
+  // Reports -----------------------------------------------------------------
+  if (resource === 'reports' && param === 'summary' && method === 'GET') {
+    const range = (new URLSearchParams(path.split('?')[1] ?? '').get('range') ?? '3M') as ReportRange
+    const today = new Date()
+    const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const count = range === '1M' ? 1 : range === '3M' ? 3 : range === '1Y' ? 12 : today.getMonth() + 1
+    const keys = Array.from({ length: count }, (_, i) =>
+      key(new Date(today.getFullYear(), today.getMonth() - (count - 1 - i), 1)),
+    )
+    const months = keys.map((month) => ({ month, income: 0, expense: 0, netWorth: 0 }))
+    const byKey = new Map(months.map((m) => [m.month, m]))
+    const flow = new Map<string, number>()
+    const spend = new Map<string | null, number>()
+    for (const t of transactions) {
+      const k = key(new Date(t.date))
+      const signed = t.type === 'income' ? t.amount : -t.amount
+      const acc = accounts.find((a) => a.id === t.accountId)
+      if (acc && acc.currency === t.currency) flow.set(k, (flow.get(k) ?? 0) + signed)
+      const bucket = byKey.get(k)
+      if (!bucket || t.currency !== 'THB') continue
+      if (t.type === 'income') bucket.income += t.amount
+      else {
+        bucket.expense += t.amount
+        const root = rootCategoryId(t.categoryId)
+        spend.set(root, (spend.get(root) ?? 0) + t.amount)
+      }
+    }
+    // Walk back from today's net worth, as the server does.
+    let netWorth = accounts
+      .map(withCurrentBalance)
+      .reduce((s, a) => s + (a.type === 'debt' ? -a.currentBalance : a.currentBalance), 0)
+    for (const m of [...months].reverse()) {
+      m.netWorth = netWorth
+      netWorth -= flow.get(m.month) ?? 0
+    }
+    const report: Report = {
+      range,
+      months,
+      totalIncome: months.reduce((s, m) => s + m.income, 0),
+      totalExpense: months.reduce((s, m) => s + m.expense, 0),
+      spendingByCategory: [...spend.entries()]
+        .map(([categoryId, amount]) => {
+          const c = categories.find((x) => x.id === categoryId)
+          return {
+            categoryId: c?.id ?? null,
+            name: c?.name ?? 'Uncategorized',
+            icon: c?.icon ?? null,
+            color: c?.color ?? null,
+            amount,
+          }
+        })
+        .sort((a, b) => b.amount - a.amount),
+    }
+    return report as T
+  }
+
+  // Goals -------------------------------------------------------------------
+  if (resource === 'goals') {
+    if (method === 'GET') return { items: goals } as T
+    const fromBody = (base: Goal): Goal => ({
+      ...base,
+      ...(body?.name !== undefined && { name: String(body.name) }),
+      ...(body?.target !== undefined && { target: Number(body.target) }),
+      ...(body?.saved !== undefined && { saved: Number(body.saved) }),
+      ...(body?.deadline !== undefined && { deadline: (body.deadline as string | null) ?? null }),
+    })
+    if (method === 'POST') {
+      const g = fromBody({ id: id(), name: '', target: 0, saved: 0, deadline: null, createdAt: now() })
+      goals = [...goals, g]
+      return g as T
+    }
+    const goal = goals.find((x) => x.id === param)
+    if (!goal) notFound('Goal')
+    if (method === 'PATCH') {
+      const updated = fromBody(goal)
+      goals = goals.map((x) => (x.id === param ? updated : x))
+      return updated as T
+    }
+    if (method === 'DELETE') {
+      goals = goals.filter((x) => x.id !== param)
       return undefined as T
     }
   }
