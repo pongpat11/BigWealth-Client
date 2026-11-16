@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Plus } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -7,6 +8,7 @@ import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import {
   browserTimezone,
+  formatDayHeading,
   formatDateTime,
   formatTHB,
   nowDateTimeLocalValue,
@@ -19,10 +21,11 @@ import { listLabels, type Label } from '@/lib/labels'
 import {
   createTransaction,
   deleteTransaction,
-  listTransactions,
+  listTransactionPage,
   updateTransaction,
   type Currency,
   type Transaction,
+  type TransactionFilters,
 } from '@/lib/transactions'
 
 const CURRENCIES: Currency[] = ['THB', 'USD']
@@ -424,16 +427,96 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
   )
 }
 
+const TYPE_TABS = [
+  { value: '', label: 'All' },
+  { value: 'income', label: 'Income' },
+  { value: 'expense', label: 'Expense' },
+] as const
+
+/** Local midnight of a 'YYYY-MM-DD' date, shifted by `addDays`, as an ISO instant. */
+function dayStartIso(date: string, addDays = 0): string | undefined {
+  const [y, m, d] = date.split('-').map(Number)
+  const at = new Date(y, m - 1, d + addDays)
+  return Number.isNaN(at.getTime()) ? undefined : at.toISOString()
+}
+
+/** Group consecutive rows (already newest-first) under a per-day heading. */
+function groupByDay(items: Transaction[]): { heading: string; rows: Transaction[] }[] {
+  const groups: { heading: string; rows: Transaction[] }[] = []
+  for (const tx of items) {
+    const heading = formatDayHeading(tx.date)
+    const last = groups[groups.length - 1]
+    if (last && last.heading === heading) last.rows.push(tx)
+    else groups.push({ heading, rows: [tx] })
+  }
+  return groups
+}
+
 export function Transactions() {
+  // Filters live in the URL so a filtered view can be bookmarked or shared.
+  const [params, setParams] = useSearchParams()
+  const type = params.get('type') ?? ''
+  const accountId = params.get('account') ?? ''
+  const categoryId = params.get('category') ?? ''
+  const from = params.get('from') ?? ''
+  const to = params.get('to') ?? ''
+  const q = params.get('q') ?? ''
+
   const [items, setItems] = useState<Transaction[] | null>(null)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [search, setSearch] = useState(q)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+
+  const filters = useMemo<TransactionFilters>(
+    () => ({
+      type: type === 'income' || type === 'expense' ? type : undefined,
+      accountId: accountId || undefined,
+      categoryId: categoryId || undefined,
+      from: from ? dayStartIso(from) : undefined,
+      // `to` is inclusive in the UI, exclusive in the API: use the next midnight.
+      to: to ? dayStartIso(to, 1) : undefined,
+      q: q || undefined,
+    }),
+    [type, accountId, categoryId, from, to, q],
+  )
+  const panelFilterCount = [accountId, categoryId, from, to].filter(Boolean).length
+  const isFiltered = Boolean(type || q || panelFilterCount)
+
+  function setParam(key: string, value: string) {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (value) next.set(key, value)
+        else next.delete(key)
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  // Debounce typing in the search box before it hits the URL / API.
+  useEffect(() => {
+    if (search === q) return
+    const timer = setTimeout(() => setParam('q', search.trim()), 300)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
 
   useEffect(() => {
     let active = true
-    listTransactions()
-      .then((rows) => active && setItems(rows))
+    listTransactionPage(filters)
+      .then((page) => {
+        if (!active) return
+        setItems(page.items)
+        setNextCursor(page.nextCursor)
+        setError(null)
+      })
       .catch(
         (err) =>
           active &&
@@ -442,7 +525,41 @@ export function Transactions() {
     return () => {
       active = false
     }
-  }, [])
+  }, [filters])
+
+  // Filter-panel options load only once the panel is opened.
+  useEffect(() => {
+    if (!filtersOpen) return
+    let active = true
+    listAccounts()
+      .then((rows) => active && setAccounts(rows))
+      .catch(() => undefined)
+    listCategories()
+      .then((rows) => active && setCategories(rows))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [filtersOpen])
+
+  async function loadMore() {
+    if (!nextCursor) return
+    setLoadingMore(true)
+    try {
+      const page = await listTransactionPage(filters, nextCursor)
+      setItems((prev) => [...(prev ?? []), ...page.items])
+      setNextCursor(page.nextCursor)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load more.')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  function clearFilters() {
+    setSearch('')
+    setParams({}, { replace: true })
+  }
 
   function closeForm() {
     setFormOpen(false)
@@ -452,7 +569,9 @@ export function Transactions() {
   function handleSaved(saved: Transaction, isEdit: boolean) {
     setItems((prev) => {
       const list = prev ?? []
-      return isEdit ? list.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...list]
+      const next = isEdit ? list.map((t) => (t.id === saved.id ? saved : t)) : [saved, ...list]
+      // Keep newest-first so the row lands under the right day.
+      return [...next].sort((a, b) => b.date.localeCompare(a.date))
     })
     closeForm()
   }
@@ -461,6 +580,8 @@ export function Transactions() {
     setItems((prev) => (prev ?? []).filter((t) => t.id !== id))
     closeForm()
   }
+
+  const topLevelCategories = categories.filter((c) => !c.parentId)
 
   return (
     <div className="space-y-4">
@@ -494,6 +615,137 @@ export function Transactions() {
         />
       )}
 
+      {/* Search + filters */}
+      <div className="space-y-3">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search
+              size={16}
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]"
+            />
+            <input
+              type="search"
+              aria-label="Search notes"
+              placeholder="Search notes"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className={selectClass + ' pl-9'}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            className={
+              'flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors ' +
+              (filtersOpen || panelFilterCount > 0
+                ? 'border-brand-600 bg-brand-50 text-brand-700'
+                : 'border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
+            }
+          >
+            <SlidersHorizontal size={16} aria-hidden />
+            Filters
+            {panelFilterCount > 0 && <span className="tnum">({panelFilterCount})</span>}
+          </button>
+        </div>
+
+        <div className="flex gap-2" role="group" aria-label="Transaction type">
+          {TYPE_TABS.map((tab) => (
+            <button
+              key={tab.label}
+              type="button"
+              aria-pressed={type === tab.value}
+              onClick={() => setParam('type', tab.value)}
+              className={
+                'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
+                (type === tab.value
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-[var(--color-surface)] text-[var(--color-muted)] border border-[var(--color-line)]')
+              }
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {filtersOpen && (
+          <Card>
+            <CardBody className="grid grid-cols-2 gap-3">
+              <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+                <label htmlFor="filter-account" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  In account
+                </label>
+                <select
+                  id="filter-account"
+                  value={accountId}
+                  onChange={(e) => setParam('account', e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">Any</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
+                <label htmlFor="filter-category" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  In category
+                </label>
+                <select
+                  id="filter-category"
+                  value={categoryId}
+                  onChange={(e) => setParam('category', e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">Any</option>
+                  {topLevelCategories.map((c) => (
+                    <optgroup key={c.id} label={c.name}>
+                      <option value={c.id}>All {c.name}</option>
+                      {categories
+                        .filter((sub) => sub.parentId === c.id)
+                        .map((sub) => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-from" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  From
+                </label>
+                <input
+                  id="filter-from"
+                  type="date"
+                  value={from}
+                  max={to || undefined}
+                  onChange={(e) => setParam('from', e.target.value)}
+                  className={selectClass}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="filter-to" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  To
+                </label>
+                <input
+                  id="filter-to"
+                  type="date"
+                  value={to}
+                  min={from || undefined}
+                  onChange={(e) => setParam('to', e.target.value)}
+                  className={selectClass}
+                />
+              </div>
+            </CardBody>
+          </Card>
+        )}
+      </div>
+
       {error && (
         <Card>
           <CardBody>
@@ -514,29 +766,58 @@ export function Transactions() {
 
       {items !== null && items.length === 0 && (
         <Card>
-          <CardBody>
+          <CardBody className="space-y-2">
             <p className="text-sm text-[var(--color-muted)]">
-              No transactions yet. Add your first one.
+              {isFiltered
+                ? 'No transactions match these filters.'
+                : 'No transactions yet. Add your first one.'}
             </p>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="text-sm font-medium text-brand-600 hover:text-brand-700"
+              >
+                Clear filters
+              </button>
+            )}
           </CardBody>
         </Card>
       )}
 
-      {items !== null && items.length > 0 && (
-        <Card>
-          <CardBody className="divide-y divide-[var(--color-line)] py-0">
-            {items.map((tx) => (
-              <TransactionRow
-                key={tx.id}
-                tx={tx}
-                onEdit={(t) => {
-                  setEditing(t)
-                  setFormOpen(true)
-                }}
-              />
-            ))}
-          </CardBody>
-        </Card>
+      {items !== null &&
+        items.length > 0 &&
+        groupByDay(items).map((group) => (
+          <section key={group.heading} aria-label={group.heading} className="space-y-1.5">
+            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
+              {group.heading}
+            </h2>
+            <Card>
+              <CardBody className="divide-y divide-[var(--color-line)] py-0">
+                {group.rows.map((tx) => (
+                  <TransactionRow
+                    key={tx.id}
+                    tx={tx}
+                    onEdit={(t) => {
+                      setEditing(t)
+                      setFormOpen(true)
+                    }}
+                  />
+                ))}
+              </CardBody>
+            </Card>
+          </section>
+        ))}
+
+      {items !== null && nextCursor && (
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={loadMore}
+          disabled={loadingMore}
+        >
+          {loadingMore ? 'Loading…' : 'Load more'}
+        </Button>
       )}
     </div>
   )

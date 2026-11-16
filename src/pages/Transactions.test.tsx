@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Transactions } from './Transactions'
@@ -8,7 +9,7 @@ import * as categoriesApi from '@/lib/categories'
 import * as accountsApi from '@/lib/accounts'
 
 vi.mock('@/lib/transactions', () => ({
-  listTransactions: vi.fn(),
+  listTransactionPage: vi.fn(),
   createTransaction: vi.fn(),
   updateTransaction: vi.fn(),
   deleteTransaction: vi.fn(),
@@ -57,6 +58,19 @@ const sample = {
   labels: [],
 }
 
+const page = (items: api.Transaction[], nextCursor: string | null = null) => ({
+  items,
+  nextCursor,
+})
+
+function renderPage(url = '/transactions') {
+  return render(
+    <MemoryRouter initialEntries={[url]}>
+      <Transactions />
+    </MemoryRouter>,
+  )
+}
+
 describe('Transactions page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -66,23 +80,23 @@ describe('Transactions page', () => {
   })
 
   it('renders fetched transactions with their category', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([sample])
-    render(<Transactions />)
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    renderPage()
     expect(await screen.findByText('Lunch — som tam')).toBeInTheDocument()
     expect(screen.getByText(/Food & Dining/)).toBeInTheDocument()
   })
 
   it('shows the empty state when there are none', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([])
-    render(<Transactions />)
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    renderPage()
     expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
   })
 
   it('adds a transaction with a categoryId and timezone', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
     vi.mocked(api.createTransaction).mockResolvedValue({ ...sample, id: '2', note: 'Coffee', amount: 120 })
     const user = userEvent.setup()
-    render(<Transactions />)
+    renderPage()
     await screen.findByText(/no transactions yet/i)
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -104,10 +118,10 @@ describe('Transactions page', () => {
   })
 
   it('edits a transaction by clicking its row', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([sample])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
     vi.mocked(api.updateTransaction).mockResolvedValue({ ...sample, note: 'Dinner', amount: 300 })
     const user = userEvent.setup()
-    render(<Transactions />)
+    renderPage()
 
     await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
     expect(screen.getByText(/edit transaction/i)).toBeInTheDocument()
@@ -118,10 +132,10 @@ describe('Transactions page', () => {
   })
 
   it('deletes a transaction (two-tap confirm)', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([sample])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
     vi.mocked(api.deleteTransaction).mockResolvedValue(undefined)
     const user = userEvent.setup()
-    render(<Transactions />)
+    renderPage()
 
     await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
     await user.click(screen.getByRole('button', { name: /delete transaction/i }))
@@ -132,10 +146,10 @@ describe('Transactions page', () => {
   })
 
   it('shows label chips on a transaction row', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([
       { ...sample, labels: [{ id: 'l1', name: 'Work', color: '#6366f1' }] },
-    ])
-    render(<Transactions />)
+    ]))
+    renderPage()
     expect(await screen.findByText('Work')).toBeInTheDocument()
   })
 
@@ -143,10 +157,10 @@ describe('Transactions page', () => {
     vi.mocked(labelsApi.listLabels).mockResolvedValue([
       { id: 'l1', name: 'Work', color: '#6366f1', isDefault: true },
     ])
-    vi.mocked(api.listTransactions).mockResolvedValue([])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
     vi.mocked(api.createTransaction).mockResolvedValue({ ...sample, id: '2', note: 'Coffee' })
     const user = userEvent.setup()
-    render(<Transactions />)
+    renderPage()
     await screen.findByText(/no transactions yet/i)
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -163,19 +177,19 @@ describe('Transactions page', () => {
   })
 
   it('shows the account name on a transaction row', async () => {
-    vi.mocked(api.listTransactions).mockResolvedValue([
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([
       { ...sample, accountId: 'kbank', account: { id: 'kbank', name: 'KBank Savings', type: 'bank' } },
-    ])
-    render(<Transactions />)
+    ]))
+    renderPage()
     expect(await screen.findByText(/KBank Savings/)).toBeInTheDocument()
   })
 
   it('selects an account in the form and includes it when saving', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
-    vi.mocked(api.listTransactions).mockResolvedValue([])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
     vi.mocked(api.createTransaction).mockResolvedValue({ ...sample, id: '2', note: 'Coffee' })
     const user = userEvent.setup()
-    render(<Transactions />)
+    renderPage()
     await screen.findByText(/no transactions yet/i)
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -189,5 +203,65 @@ describe('Transactions page', () => {
         expect.objectContaining({ accountId: 'kbank' }),
       ),
     )
+  })
+  it('groups rows under a day heading', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    renderPage()
+    expect(await screen.findByRole('heading', { name: 'Today' })).toBeInTheDocument()
+  })
+
+  it('reads filters from the URL and sends them to the API', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    renderPage('/transactions?type=expense&account=kbank&q=lunch&from=2026-07-01&to=2026-07-31')
+
+    expect(await screen.findByText(/no transactions match these filters/i)).toBeInTheDocument()
+    const filters = vi.mocked(api.listTransactionPage).mock.calls[0][0]!
+    expect(filters).toMatchObject({ type: 'expense', accountId: 'kbank', q: 'lunch' })
+    // Local-midnight bounds; `to` is inclusive in the UI so the API gets 1 Aug.
+    expect(filters.from).toBe(new Date(2026, 6, 1).toISOString())
+    expect(filters.to).toBe(new Date(2026, 7, 1).toISOString())
+  })
+
+  it('filters by type from the segmented control', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Lunch — som tam')
+
+    await user.click(screen.getByRole('button', { name: 'Income' }))
+    await waitFor(() =>
+      expect(api.listTransactionPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ type: 'income' }),
+      ),
+    )
+  })
+
+  it('searches notes after a short pause', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Lunch — som tam')
+
+    await user.type(screen.getByLabelText(/search notes/i), 'som')
+    await waitFor(() =>
+      expect(api.listTransactionPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ q: 'som' }),
+      ),
+    )
+  })
+
+  it('loads the next page and appends it', async () => {
+    vi.mocked(api.listTransactionPage)
+      .mockResolvedValueOnce(page([sample], '1'))
+      .mockResolvedValueOnce(page([{ ...sample, id: '2', note: 'Older coffee' }]))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /load more/i }))
+
+    expect(await screen.findByText('Older coffee')).toBeInTheDocument()
+    expect(screen.getByText('Lunch — som tam')).toBeInTheDocument()
+    expect(api.listTransactionPage).toHaveBeenLastCalledWith(expect.any(Object), '1')
+    expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument()
   })
 })

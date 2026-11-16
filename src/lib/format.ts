@@ -122,3 +122,13 @@ export function formatMonth(month: string): string {
     year: 'numeric',
   })
 }
+
+/** Day heading for grouped lists: "Today", "Yesterday" or "5 Jul 2026". */
+export function formatDayHeading(iso: string): string {
+  const d = new Date(iso)
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}

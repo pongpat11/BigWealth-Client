@@ -357,10 +357,31 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
 
   // Transactions ------------------------------------------------------------
   if (resource === 'transactions') {
-    if (method === 'GET')
+    if (method === 'GET') {
+      const qs = new URLSearchParams(path.split('?')[1] ?? '')
+      const f = (k: string) => qs.get(k)
+      const rows = [...transactions]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .filter(
+          (t) =>
+            (!f('type') || t.type === f('type')) &&
+            (!f('accountId') || t.accountId === f('accountId')) &&
+            (!f('categoryId') ||
+              t.categoryId === f('categoryId') ||
+              t.subCategoryId === f('categoryId')) &&
+            (!f('labelId') || t.labels.some((l) => l.id === f('labelId'))) &&
+            (!f('from') || t.date >= new Date(f('from')!).toISOString()) &&
+            (!f('to') || t.date < new Date(f('to')!).toISOString()) &&
+            (!f('q') || (t.note ?? '').toLowerCase().includes(f('q')!.toLowerCase())),
+        )
+      const limit = Number(f('limit') ?? 50)
+      const start = f('cursor') ? rows.findIndex((t) => t.id === f('cursor')) + 1 : 0
+      const items = rows.slice(start, start + limit)
       return {
-        items: [...transactions].sort((a, b) => b.date.localeCompare(a.date)),
+        items,
+        nextCursor: start + limit < rows.length ? items[items.length - 1].id : null,
       } as T
+    }
     const buildTx = (base: Partial<Transaction>): Transaction => {
       const catId = (body?.categoryId as string) ?? null
       const subId = (body?.subCategoryId as string) ?? null
