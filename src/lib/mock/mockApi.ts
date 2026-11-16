@@ -8,6 +8,7 @@ import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
+import type { Dividend, DividendList, Holding, Portfolio } from '../portfolio'
 import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -157,6 +158,44 @@ let goals: Goal[] = [
   { id: 'g-emergency', name: 'Emergency Fund', target: 300_000, saved: 210_000, deadline: null, createdAt: daysAgo(400) },
   { id: 'g-japan', name: 'Japan Trip', target: 60_000, saved: 60_000, deadline: dateIn(-20), createdAt: daysAgo(300) },
 ]
+
+// Portfolio: stored rows hold only what the user enters; values are derived.
+const MOCK_USD_THB = 34
+type StoredHolding = Pick<
+  Holding,
+  'id' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt'
+>
+let holdings: StoredHolding[] = [
+  { id: 'h-ptt', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2) },
+  { id: 'h-cpall', symbol: 'CPALL', name: 'CP All', assetClass: 'set', currency: 'THB', quantity: 4000, avgCost: 62, price: 58.5, priceUpdatedAt: daysAgo(2) },
+  { id: 'h-voo', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1) },
+  { id: 'h-kfsdiv', symbol: 'KFSDIV', name: 'Krungsri Dividend', assetClass: 'fund', currency: 'THB', quantity: 8200, avgCost: 18.2, price: 19.05, priceUpdatedAt: daysAgo(5) },
+  { id: 'h-btc', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1) },
+  { id: 'h-gold', symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
+]
+type StoredDividend = Omit<Dividend, 'net' | 'netTHB'>
+let dividendRows: StoredDividend[] = [
+  { id: 'd-ptt', symbol: 'PTT', payDate: dateIn(-40), currency: 'THB', gross: 2400, withholdingTax: 240 },
+  { id: 'd-voo', symbol: 'VOO', payDate: dateIn(-75), currency: 'USD', gross: 20.4, withholdingTax: 3.06 },
+  { id: 'd-cpall', symbol: 'CPALL', payDate: dateIn(-190), currency: 'THB', gross: 4000, withholdingTax: 400 },
+]
+const thbFactor = (currency: string) => (currency === 'USD' ? MOCK_USD_THB : 1)
+function valued(h: StoredHolding): Holding {
+  const marketValue = h.quantity * h.price
+  const costBasis = h.quantity * h.avgCost
+  return {
+    ...h,
+    marketValue,
+    costBasis,
+    marketValueTHB: marketValue * thbFactor(h.currency),
+    costBasisTHB: costBasis * thbFactor(h.currency),
+    gainPct: costBasis > 0 ? ((marketValue - costBasis) / costBasis) * 100 : null,
+  }
+}
+function withNet(d: StoredDividend): Dividend {
+  const net = d.gross - d.withholdingTax
+  return { ...d, net, netTHB: net * thbFactor(d.currency) }
+}
 
 let mockUserName: string | null = 'Demo'
 
@@ -310,6 +349,82 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       budgets = budgets.filter((x) => x.id !== param)
+      return undefined as T
+    }
+  }
+
+  // Portfolio ---------------------------------------------------------------
+  const mockFx = { usdThb: MOCK_USD_THB, date: now().slice(0, 10) }
+  if (resource === 'portfolio' && method === 'GET') {
+    const rows = holdings.map(valued)
+    const totalValueTHB = rows.reduce((s, h) => s + (h.marketValueTHB ?? 0), 0)
+    const totalCostTHB = rows.reduce((s, h) => s + (h.costBasisTHB ?? 0), 0)
+    const byClass = new Map<Holding['assetClass'], number>()
+    for (const h of rows) {
+      byClass.set(h.assetClass, (byClass.get(h.assetClass) ?? 0) + (h.marketValueTHB ?? 0))
+    }
+    const portfolio: Portfolio = {
+      fx: mockFx,
+      totalValueTHB,
+      totalCostTHB,
+      totalGainTHB: totalValueTHB - totalCostTHB,
+      totalGainPct: totalCostTHB > 0 ? ((totalValueTHB - totalCostTHB) / totalCostTHB) * 100 : null,
+      unconvertedCount: 0,
+      holdings: rows,
+      allocation: [...byClass.entries()]
+        .map(([assetClass, valueTHB]) => ({
+          assetClass,
+          valueTHB,
+          pct: totalValueTHB > 0 ? (valueTHB / totalValueTHB) * 100 : 0,
+        }))
+        .sort((a, b) => b.valueTHB - a.valueTHB),
+    }
+    return portfolio as T
+  }
+  if (resource === 'holdings') {
+    if (method === 'POST') {
+      const h = { ...(body as unknown as Omit<StoredHolding, 'id' | 'priceUpdatedAt'>), id: id(), priceUpdatedAt: now() }
+      holdings = [...holdings, h]
+      return valued(h) as T
+    }
+    const existing = holdings.find((x) => x.id === param)
+    if (!existing) notFound('Holding')
+    if (method === 'PATCH') {
+      const updated = { ...existing, ...(body as Partial<StoredHolding>), priceUpdatedAt: now() }
+      holdings = holdings.map((x) => (x.id === param ? updated : x))
+      return valued(updated) as T
+    }
+    if (method === 'DELETE') {
+      holdings = holdings.filter((x) => x.id !== param)
+      return undefined as T
+    }
+  }
+  if (resource === 'dividends') {
+    if (method === 'GET') {
+      const year = new URLSearchParams(path.split('?')[1] ?? '').get('year')
+      const items = dividendRows
+        .filter((d) => !year || d.payDate.startsWith(year))
+        .sort((a, b) => b.payDate.localeCompare(a.payDate))
+        .map(withNet)
+      const totalGrossTHB = items.reduce((s, d) => s + d.gross * thbFactor(d.currency), 0)
+      const totalTaxTHB = items.reduce((s, d) => s + d.withholdingTax * thbFactor(d.currency), 0)
+      const list: DividendList = {
+        fx: mockFx,
+        totalGrossTHB,
+        totalTaxTHB,
+        totalNetTHB: totalGrossTHB - totalTaxTHB,
+        unconvertedCount: 0,
+        items,
+      }
+      return list as T
+    }
+    if (method === 'POST') {
+      const d = { ...(body as unknown as Omit<StoredDividend, 'id'>), id: id() }
+      dividendRows = [...dividendRows, d]
+      return withNet(d) as T
+    }
+    if (method === 'DELETE') {
+      dividendRows = dividendRows.filter((x) => x.id !== param)
       return undefined as T
     }
   }

@@ -4,7 +4,6 @@ import { AppShell } from '@/components/layout/AppShell'
 import { Accounts } from '@/pages/Accounts'
 import { Budgets } from '@/pages/Budgets'
 import { Categories } from '@/pages/Categories'
-import { ComingSoon } from '@/pages/ComingSoon'
 import { Dashboard } from '@/pages/Dashboard'
 import { Debts } from '@/pages/Debts'
 import { Goals } from '@/pages/Goals'
@@ -12,6 +11,7 @@ import { Labels } from '@/pages/Labels'
 import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
 import { NotFound } from '@/pages/NotFound'
+import { Portfolio } from '@/pages/Portfolio'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
@@ -28,7 +28,7 @@ function App() {
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/labels" element={<Labels />} />
-          <Route path="/portfolio" element={<ComingSoon title="Portfolio" />} />
+          <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/more" element={<More />} />
           <Route path="/goals" element={<Goals />} />
