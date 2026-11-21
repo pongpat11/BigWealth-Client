@@ -112,19 +112,19 @@ describe('Categories page', () => {
     expect(await screen.findByText('Sushi')).toBeInTheDocument()
   })
 
-  it('deletes a custom sub-category with a two-tap confirm', async () => {
+  it('deletes a custom sub-category in one tap', async () => {
     vi.mocked(api.listCategories).mockResolvedValue([sideHustle, { ...restaurants, id: 'freelance', name: 'Freelance', parentId: 'side-hustle', isDefault: false }])
     vi.mocked(api.deleteCategory).mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<Categories />)
 
     await screen.findByText('Freelance')
-    const deleteButtons = screen.getAllByText('×')
-    await user.click(deleteButtons[0])
-    await user.click(screen.getByText(/confirm\?/i))
+    await user.click(screen.getByRole('button', { name: 'Delete Freelance' }))
+    expect(screen.queryByText('Freelance')).not.toBeInTheDocument()
+    expect(screen.getByText('Side Hustle')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteCategory).toHaveBeenCalledWith('freelance'))
-    expect(screen.queryByText('Freelance')).not.toBeInTheDocument()
   })
 
   it('deletes a custom top-level category via the API (not just local state)', async () => {
@@ -134,12 +134,26 @@ describe('Categories page', () => {
     render(<Categories />)
 
     await screen.findByText('Side Hustle')
-    // Only one delete affordance exists here: the category's own (no sub-categories).
-    const deleteButtons = screen.getAllByText('×')
-    await user.click(deleteButtons[0])
-    await user.click(screen.getByText(/confirm\?/i))
+    await user.click(screen.getByRole('button', { name: 'Delete Side Hustle' }))
+    expect(screen.queryByText('Side Hustle')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteCategory).toHaveBeenCalledWith('side-hustle'))
-    expect(screen.queryByText('Side Hustle')).not.toBeInTheDocument()
+  })
+
+  it('restores a category and its sub-categories with Undo', async () => {
+    vi.mocked(api.listCategories).mockResolvedValue([sideHustle, { ...restaurants, id: 'freelance', name: 'Freelance', parentId: 'side-hustle', isDefault: false }])
+    const user = userEvent.setup()
+    render(<Categories />)
+
+    await screen.findByText('Freelance')
+    await user.click(screen.getByRole('button', { name: 'Delete Side Hustle' }))
+    expect(screen.getByRole('status')).toHaveTextContent(/and 1 sub-category/i)
+    expect(screen.queryByText('Freelance')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+    expect(screen.getByText('Side Hustle')).toBeInTheDocument()
+    expect(screen.getByText('Freelance')).toBeInTheDocument()
+    expect(api.deleteCategory).not.toHaveBeenCalled()
   })
 })

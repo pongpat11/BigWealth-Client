@@ -52,17 +52,17 @@ describe('Labels page', () => {
     expect(await screen.findByText('Business')).toBeInTheDocument()
   })
 
-  it('deletes a custom label with a two-tap confirm, via the API', async () => {
+  it('deletes a custom label in one tap, via the API', async () => {
     vi.mocked(api.listLabels).mockResolvedValue([vacation])
     vi.mocked(api.deleteLabel).mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<Labels />)
 
-    await user.click(await screen.findByRole('button', { name: /^delete$/i }))
-    await user.click(screen.getByRole('button', { name: /confirm delete/i }))
+    await user.click(await screen.findByRole('button', { name: 'Delete Vacation' }))
+    expect(screen.queryByText('Vacation')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteLabel).toHaveBeenCalledWith('vacation'))
-    expect(screen.queryByText('Vacation')).not.toBeInTheDocument()
   })
 
   it('does not show Edit/Delete for a default label', async () => {

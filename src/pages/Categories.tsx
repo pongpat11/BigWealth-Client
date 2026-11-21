@@ -6,6 +6,8 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
 import {
   createCategory,
@@ -20,24 +22,6 @@ const FALLBACK_COLOR = '#94a3b8'
 function chipStyle(color: string | null) {
   const c = color ?? FALLBACK_COLOR
   return { backgroundColor: c + '20', color: c }
-}
-
-/** Inline "tap once to arm, tap again to confirm" delete button. */
-function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={() => (armed ? onConfirm() : setArmed(true))}
-      onBlur={() => setArmed(false)}
-      className={
-        'text-xs font-medium transition-colors ' +
-        (armed ? 'text-[var(--color-loss)]' : 'text-[var(--color-muted)] hover:text-[var(--color-loss)]')
-      }
-    >
-      {armed ? 'Confirm?' : '×'}
-    </button>
-  )
 }
 
 function NewCategoryForm({
@@ -178,12 +162,12 @@ function CategoryGroup({
   category,
   children,
   onChanged,
-  onRemoved,
+  onDelete,
 }: {
   category: Category
   children: Category[]
   onChanged: (c: Category) => void
-  onRemoved: (id: string) => void
+  onDelete: (c: Category) => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(category.name)
@@ -202,15 +186,6 @@ function CategoryGroup({
       setRenaming(false)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not rename.')
-    }
-  }
-
-  async function handleDelete(id: string) {
-    try {
-      await deleteCategory(id)
-      onRemoved(id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete.')
     }
   }
 
@@ -243,13 +218,20 @@ function CategoryGroup({
           {category.isDefault ? (
             <Badge tone="neutral">Default</Badge>
           ) : (
-            <button
-              type="button"
-              onClick={() => setRenaming((v) => !v)}
-              className="shrink-0 text-xs font-medium text-brand-600"
-            >
-              Edit
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setRenaming((v) => !v)}
+                className="h-9 rounded-xl px-2 text-xs font-medium text-brand-600 hover:bg-[var(--color-canvas)]"
+              >
+                Rename
+              </button>
+              <DeleteButton
+                label={`Delete ${category.name}`}
+                onClick={() => onDelete(category)}
+                className="-mr-2"
+              />
+            </div>
           )}
         </div>
 
@@ -258,13 +240,17 @@ function CategoryGroup({
         {children.length > 0 && (
           <div className="space-y-1.5 pl-1">
             {children.map((sub) => (
-              <div key={sub.id} className="flex items-center justify-between gap-2 pl-6">
+              <div key={sub.id} className="flex min-h-9 items-center justify-between gap-2 pl-6">
                 <span className="flex items-center gap-2 text-sm text-[var(--color-ink)]">
                   <span className="text-[var(--color-muted)]">•</span>
                   {sub.name}
                 </span>
                 {!sub.isDefault && (
-                  <DeleteButton onConfirm={() => handleDelete(sub.id)} />
+                  <DeleteButton
+                    label={`Delete ${sub.name}`}
+                    onClick={() => onDelete(sub)}
+                    className="-mr-2"
+                  />
                 )}
               </div>
             ))}
@@ -288,10 +274,6 @@ function CategoryGroup({
           >
             + Add sub-category
           </button>
-        )}
-
-        {!category.isDefault && (
-          <DeleteButton onConfirm={() => handleDelete(category.id)} />
         )}
       </CardBody>
     </Card>
@@ -335,8 +317,32 @@ export function Categories() {
     })
   }
 
-  function remove(id: string) {
-    setItems((prev) => (prev ?? []).filter((c) => c.id !== id && c.parentId !== id))
+  const undoable = useUndoableDelete()
+
+  /** Deleting a category takes its sub-categories with it. */
+  function handleDelete(category: Category) {
+    const all = items ?? []
+    const order = new Map(all.map((c, i) => [c.id, i]))
+    const removed = all.filter((c) => c.id === category.id || c.parentId === category.id)
+    const subs = removed.length - 1
+    undoable.remove({
+      message:
+        `Deleted “${category.name}”` +
+        (subs > 0 ? ` and ${subs} sub-categor${subs === 1 ? 'y' : 'ies'}` : ''),
+      hide: () =>
+        setItems((prev) =>
+          (prev ?? []).filter((c) => c.id !== category.id && c.parentId !== category.id),
+        ),
+      restore: () =>
+        setItems((prev) => {
+          const list = prev ?? []
+          const missing = removed.filter((r) => !list.some((c) => c.id === r.id))
+          return [...list, ...missing].sort(
+            (a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity),
+          )
+        }),
+      commit: () => deleteCategory(category.id),
+    })
   }
 
   return (
@@ -352,6 +358,7 @@ export function Categories() {
         }
       />
 
+      {undoable.toast}
       {addingCategory && (
         <NewCategoryForm
           onSaved={(c) => {
@@ -394,7 +401,7 @@ export function Categories() {
                     category={cat}
                     children={childrenOf(cat.id)}
                     onChanged={upsert}
-                    onRemoved={remove}
+                    onDelete={handleDelete}
                   />
                 ))}
               </div>
@@ -421,7 +428,7 @@ export function Categories() {
                     category={cat}
                     children={childrenOf(cat.id)}
                     onChanged={upsert}
-                    onRemoved={remove}
+                    onDelete={handleDelete}
                   />
                 ))}
               </div>

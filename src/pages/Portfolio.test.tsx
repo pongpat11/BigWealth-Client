@@ -206,7 +206,7 @@ describe('Portfolio page', () => {
     expect(api.createDividend).not.toHaveBeenCalled()
   })
 
-  it('deletes a dividend with a two-tap confirm', async () => {
+  it('deletes a dividend in one tap with an undo window', async () => {
     vi.mocked(api.deleteDividend).mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<Portfolio />)
@@ -214,8 +214,9 @@ describe('Portfolio page', () => {
     await user.click(screen.getByRole('tab', { name: /dividends/i }))
 
     await user.click(await screen.findByRole('button', { name: 'Delete PTT dividend' }))
+    expect(screen.queryByRole('button', { name: 'Delete PTT dividend' })).not.toBeInTheDocument()
     expect(api.deleteDividend).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: 'Confirm delete PTT dividend' }))
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteDividend).toHaveBeenCalledWith('d1'))
   })

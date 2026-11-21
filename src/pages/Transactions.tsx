@@ -6,6 +6,9 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { useUndoableDelete } from '@/lib/useUndoableDelete'
 import {
   browserTimezone,
   formatDayHeading,
@@ -44,12 +47,12 @@ const selectClass =
 function TransactionForm({
   initial,
   onSaved,
-  onDeleted,
+  onDelete,
   onClose,
 }: {
   initial?: Transaction
   onSaved: (t: Transaction, isEdit: boolean) => void
-  onDeleted: (id: string) => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const isEdit = Boolean(initial)
@@ -67,7 +70,6 @@ function TransactionForm({
   const [note, setNote] = useState(initial?.note ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [armed, setArmed] = useState(false) // two-tap delete confirm
   const [categories, setCategories] = useState<Category[]>([])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [labels, setLabels] = useState<Label[]>([])
@@ -105,24 +107,6 @@ function TransactionForm({
     setSelectedLabelIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     )
-  }
-
-  async function handleDelete() {
-    if (!initial) return
-    if (!armed) {
-      setArmed(true)
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await deleteTransaction(initial.id)
-      onDeleted(initial.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-      setSaving(false)
-      setArmed(false)
-    }
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -356,14 +340,12 @@ function TransactionForm({
           </div>
 
           {isEdit && (
-            <button
-              type="button"
-              onClick={handleDelete}
+            <DeleteButton
+              variant="block"
+              label="Delete transaction"
+              onClick={onDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
-            >
-              {armed ? 'Tap again to delete' : 'Delete transaction'}
-            </button>
+            />
           )}
         </form>
       </CardBody>
@@ -605,9 +587,21 @@ export function Transactions() {
     closeForm()
   }
 
-  function handleDeleted(id: string) {
-    setItems((prev) => (prev ?? []).filter((t) => t.id !== id))
+  const undoable = useUndoableDelete()
+
+  function handleDelete(tx: Transaction) {
     closeForm()
+    undoable.remove({
+      message: 'Transaction deleted',
+      hide: () => setItems((prev) => (prev ?? []).filter((t) => t.id !== tx.id)),
+      restore: () =>
+        setItems((prev) =>
+          [...(prev ?? []).filter((t) => t.id !== tx.id), tx].sort((a, b) =>
+            b.date.localeCompare(a.date),
+          ),
+        ),
+      commit: () => deleteTransaction(tx.id),
+    })
   }
 
   const topLevelCategories = categories.filter((c) => !c.parentId)
@@ -635,14 +629,17 @@ export function Transactions() {
       />
 
       {formOpen && (
-        <TransactionForm
-          key={editing?.id ?? 'new'}
-          initial={editing ?? undefined}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
-          onClose={closeForm}
-        />
+        <Sheet label={editing ? 'Edit transaction' : 'New transaction'} onClose={closeForm}>
+          <TransactionForm
+            key={editing?.id ?? 'new'}
+            initial={editing ?? undefined}
+            onSaved={handleSaved}
+            onDelete={() => editing && handleDelete(editing)}
+            onClose={closeForm}
+          />
+        </Sheet>
       )}
+      {undoable.toast}
 
       {/* Search + filters */}
       <div className="space-y-3">

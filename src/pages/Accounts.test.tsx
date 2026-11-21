@@ -111,17 +111,32 @@ describe('Accounts page', () => {
     expect(await screen.findByText('Bangkok Bank')).toBeInTheDocument()
   })
 
-  it('deletes an account with a two-tap confirm', async () => {
+  it('deletes an account in one tap, sending it once the undo toast closes', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([wallet])
     vi.mocked(api.deleteAccount).mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<Accounts />)
 
     await screen.findByText('Wallet')
-    await user.click(screen.getByText('×'))
-    await user.click(screen.getByText(/confirm\?/i))
+    await user.click(screen.getByRole('button', { name: 'Delete Wallet' }))
+    expect(screen.queryByText('Wallet')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/deleted “wallet”/i)
+    expect(api.deleteAccount).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteAccount).toHaveBeenCalledWith('a2'))
-    expect(screen.queryByText('Wallet')).not.toBeInTheDocument()
+  })
+
+  it('brings an account back with Undo and never calls the API', async () => {
+    vi.mocked(api.listAccounts).mockResolvedValue([wallet])
+    const user = userEvent.setup()
+    render(<Accounts />)
+
+    await screen.findByText('Wallet')
+    await user.click(screen.getByRole('button', { name: 'Delete Wallet' }))
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+
+    expect(screen.getByText('Wallet')).toBeInTheDocument()
+    expect(api.deleteAccount).not.toHaveBeenCalled()
   })
 })

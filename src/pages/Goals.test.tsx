@@ -133,7 +133,7 @@ describe('Goals page', () => {
     expect(await screen.findByText('Goal reached')).toBeInTheDocument()
   })
 
-  it('deletes a goal with a two-tap confirm', async () => {
+  it('deletes a goal in one tap with an undo window', async () => {
     vi.mocked(api.listGoals).mockResolvedValue([macbook])
     vi.mocked(api.deleteGoal).mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -141,9 +141,10 @@ describe('Goals page', () => {
 
     await user.click(await screen.findByRole('button', { name: /edit goal new macbook/i }))
     await user.click(screen.getByRole('button', { name: /delete goal/i }))
-    await user.click(screen.getByRole('button', { name: /tap again to delete/i }))
+    expect(await screen.findByText(/no goals yet/i)).toBeInTheDocument()
+    expect(api.deleteGoal).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteGoal).toHaveBeenCalledWith('g1'))
-    expect(await screen.findByText(/no goals yet/i)).toBeInTheDocument()
   })
 })

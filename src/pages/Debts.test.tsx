@@ -155,7 +155,7 @@ describe('Debts page', () => {
     )
   })
 
-  it('deletes a debt with a two-tap confirm', async () => {
+  it('deletes a debt in one tap with an undo window', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([card])
     vi.mocked(api.deleteAccount).mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -163,10 +163,10 @@ describe('Debts page', () => {
 
     await user.click(await screen.findByRole('button', { name: /edit debt credit card/i }))
     await user.click(screen.getByRole('button', { name: /delete debt/i }))
+    expect(await screen.findByText(/no debts tracked/i)).toBeInTheDocument()
     expect(api.deleteAccount).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: /tap again to delete/i }))
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteAccount).toHaveBeenCalledWith('card'))
-    expect(await screen.findByText(/no debts tracked/i)).toBeInTheDocument()
   })
 })
