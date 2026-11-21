@@ -5,6 +5,9 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ApiError } from '@/lib/api'
 import {
@@ -37,7 +40,7 @@ function BudgetForm({
   categories,
   month,
   onSaved,
-  onDeleted,
+  onDelete,
   onClose,
 }: {
   initial?: Budget
@@ -45,14 +48,13 @@ function BudgetForm({
   categories: Category[]
   month: string
   onSaved: (b: Budget) => void
-  onDeleted: (id: string) => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
   const [limit, setLimit] = useState(initial ? String(initial.limit) : '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [armed, setArmed] = useState(false) // two-tap delete confirm
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -75,24 +77,6 @@ function BudgetForm({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
       setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!initial) return
-    if (!armed) {
-      setArmed(true)
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await deleteBudget(initial.id)
-      onDeleted(initial.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-      setSaving(false)
-      setArmed(false)
     }
   }
 
@@ -155,14 +139,12 @@ function BudgetForm({
           </div>
 
           {initial && (
-            <button
-              type="button"
-              onClick={handleDelete}
+            <DeleteButton
+              variant="block"
+              label="Remove budget"
+              onClick={onDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
-            >
-              {armed ? 'Tap again to remove' : 'Remove budget'}
-            </button>
+            />
           )}
         </form>
       </CardBody>
@@ -273,6 +255,22 @@ export function Budgets() {
     setReloadKey((k) => k + 1)
   }
 
+  const undoable = useUndoableDelete()
+
+  function handleDelete(budget: Budget) {
+    closeForm()
+    const index = (overview?.items ?? []).findIndex((b) => b.id === budget.id)
+    const setItems = (fn: (items: Budget[]) => Budget[]) =>
+      setOverview((o) => (o ? { ...o, items: fn(o.items) } : o))
+    undoable.remove({
+      message: `Removed ${budget.category.name} budget`,
+      hide: () => setItems((items) => items.filter((b) => b.id !== budget.id)),
+      restore: () => setItems((items) => reinsert(items, budget, index)),
+      commit: () => deleteBudget(budget.id),
+      onCommitted: () => setReloadKey((k) => k + 1),
+    })
+  }
+
   const items = overview?.items ?? []
   const totalPct = overview ? pctOf(overview.totalSpent, overview.totalLimit) : 0
 
@@ -322,16 +320,19 @@ export function Budgets() {
       </div>
 
       {formOpen && (
-        <BudgetForm
-          key={editing?.id ?? 'new'}
-          initial={editing ?? undefined}
-          categories={available}
-          month={month}
-          onSaved={handleChanged}
-          onDeleted={handleChanged}
-          onClose={closeForm}
-        />
+        <Sheet label={editing ? 'Edit budget' : 'New budget'} onClose={closeForm}>
+          <BudgetForm
+            key={editing?.id ?? 'new'}
+            initial={editing ?? undefined}
+            categories={available}
+            month={month}
+            onSaved={handleChanged}
+            onDelete={() => editing && handleDelete(editing)}
+            onClose={closeForm}
+          />
+        </Sheet>
       )}
+      {undoable.toast}
 
       {error && (
         <Card>

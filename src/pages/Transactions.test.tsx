@@ -131,18 +131,32 @@ describe('Transactions page', () => {
     expect(await screen.findByText('Dinner')).toBeInTheDocument()
   })
 
-  it('deletes a transaction (two-tap confirm)', async () => {
+  it('deletes a transaction in one tap from the edit sheet', async () => {
     vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
     vi.mocked(api.deleteTransaction).mockResolvedValue(undefined)
     const user = userEvent.setup()
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
+    expect(screen.getByRole('dialog', { name: /edit transaction/i })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /delete transaction/i }))
-    await user.click(screen.getByRole('button', { name: /tap again to delete/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
+    expect(api.deleteTransaction).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteTransaction).toHaveBeenCalledWith('1'))
-    expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
+  })
+
+  it('closes the edit sheet with Escape', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /lunch — som tam/i }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('shows label chips on a transaction row', async () => {
