@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Plus, Repeat, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -372,8 +372,15 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
         <Icon name={cat?.icon ?? 'Circle'} size={16} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || categoryLabel}
+        <p className="flex items-center gap-1 truncate text-sm font-semibold text-[var(--color-ink)]">
+          <span className="truncate">{tx.note || categoryLabel}</span>
+          {tx.recurringRuleId && (
+            <Repeat
+              size={12}
+              className="shrink-0 text-[var(--color-muted)]"
+              aria-label="Recurring"
+            />
+          )}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
           {categoryLabel}

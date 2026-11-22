@@ -40,6 +40,8 @@ export interface Transaction {
   timezone: string | null
   createdAt: string
   labels: TransactionLabel[]
+  /** Set when a recurring rule created this entry. */
+  recurringRuleId?: string | null
 }
 
 export interface TransactionInput {

@@ -5,6 +5,7 @@ import {
   CreditCard,
   Landmark,
   LogOut,
+  Repeat,
   Settings,
   Tag,
   Tags,
@@ -15,6 +16,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { logout } from '@/lib/auth'
 
 const items = [
+  { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/goals', label: 'Savings Goals', icon: Target },
   { to: '/debts', label: 'Debts', icon: CreditCard },
   { to: '/reports', label: 'Reports', icon: BarChart3 },

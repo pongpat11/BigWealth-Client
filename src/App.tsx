@@ -12,6 +12,7 @@ import { Login } from '@/pages/Login'
 import { More } from '@/pages/More'
 import { NotFound } from '@/pages/NotFound'
 import { Portfolio } from '@/pages/Portfolio'
+import { Recurring } from '@/pages/Recurring'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
@@ -31,6 +32,7 @@ function App() {
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/more" element={<More />} />
+          <Route path="/recurring" element={<Recurring />} />
           <Route path="/goals" element={<Goals />} />
           <Route path="/debts" element={<Debts />} />
           <Route path="/reports" element={<Reports />} />
