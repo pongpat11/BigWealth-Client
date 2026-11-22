@@ -8,6 +8,7 @@ import type { Category } from '../categories'
 import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
+import { nextOccurrenceOnOrAfter, todayKey, type RecurringRule } from '../recurring'
 import type { Dividend, DividendList, Holding, Portfolio } from '../portfolio'
 import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
@@ -195,6 +196,31 @@ function valued(h: StoredHolding): Holding {
 function withNet(d: StoredDividend): Dividend {
   const net = d.gross - d.withholdingTax
   return { ...d, net, netTHB: net * thbFactor(d.currency) }
+}
+
+// Stored without derived fields; nextDate / category / account are added on read.
+type StoredRule = Omit<RecurringRule, 'nextDate' | 'category' | 'subCategory' | 'account'>
+const monthDay = (day: number) => {
+  const d = new Date()
+  return `${d.getFullYear() - 1}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+let recurringRules: StoredRule[] = [
+  { id: 'r-salary', type: 'income', amount: 65_000, currency: 'THB', categoryId: 'salary', subCategoryId: null, accountId: 'kbank', note: 'Monthly salary', labelIds: ['recurring'], frequency: 'monthly', interval: 1, startDate: monthDay(25), endDate: null, timezone: 'Asia/Bangkok', active: true, createdAt: daysAgo(300) },
+  { id: 'r-rent', type: 'expense', amount: 15_000, currency: 'THB', categoryId: 'home', subCategoryId: null, accountId: 'kbank', note: 'Condo rent', labelIds: ['recurring'], frequency: 'monthly', interval: 1, startDate: monthDay(1), endDate: null, timezone: 'Asia/Bangkok', active: true, createdAt: daysAgo(300) },
+  { id: 'r-netflix', type: 'expense', amount: 419, currency: 'THB', categoryId: 'bills', subCategoryId: null, accountId: 'card', note: 'Netflix', labelIds: [], frequency: 'monthly', interval: 1, startDate: monthDay(12), endDate: null, timezone: 'Asia/Bangkok', active: true, createdAt: daysAgo(200) },
+  { id: 'r-insurance', type: 'expense', amount: 18_500, currency: 'THB', categoryId: 'bills', subCategoryId: null, accountId: 'kbank', note: 'Car insurance', labelIds: [], frequency: 'yearly', interval: 1, startDate: monthDay(5), endDate: null, timezone: 'Asia/Bangkok', active: false, createdAt: daysAgo(200) },
+]
+
+function withNext(r: StoredRule): RecurringRule {
+  let nextDate: string | null = r.active ? nextOccurrenceOnOrAfter(r, todayKey()) : null
+  if (nextDate && r.endDate && nextDate > r.endDate) nextDate = null
+  return {
+    ...r,
+    category: txCategory(r.categoryId),
+    subCategory: txCategory(r.subCategoryId),
+    account: txAccount(r.accountId),
+    nextDate,
+  }
 }
 
 let mockUserName: string | null = 'Demo'
@@ -483,6 +509,45 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         .sort((a, b) => b.amount - a.amount),
     }
     return report as T
+  }
+
+  // Recurring ---------------------------------------------------------------
+  if (resource === 'recurring') {
+    if (param === 'run' && method === 'POST') return { created: 0 } as T
+    if (method === 'GET') return { items: recurringRules.map(withNext) } as T
+    const fromBody = (base: Pick<StoredRule, 'id' | 'createdAt'>): StoredRule => ({
+      ...base,
+      type: body?.type as StoredRule['type'],
+      amount: Number(body?.amount ?? 0),
+      currency: String(body?.currency ?? 'THB'),
+      categoryId: String(body?.categoryId ?? ''),
+      subCategoryId: (body?.subCategoryId as string) ?? null,
+      accountId: (body?.accountId as string) ?? null,
+      note: (body?.note as string) ?? null,
+      labelIds: (body?.labelIds as string[]) ?? [],
+      frequency: body?.frequency as StoredRule['frequency'],
+      interval: Number(body?.interval ?? 1),
+      startDate: String(body?.startDate),
+      endDate: (body?.endDate as string | null) ?? null,
+      timezone: String(body?.timezone ?? 'Asia/Bangkok'),
+      active: body?.active !== false,
+    })
+    if (method === 'POST') {
+      const r = fromBody({ id: id(), createdAt: now() })
+      recurringRules = [...recurringRules, r]
+      return withNext(r) as T
+    }
+    const rule = recurringRules.find((x) => x.id === param)
+    if (!rule) notFound('Recurring rule')
+    if (method === 'PUT') {
+      const r = fromBody({ id: rule.id, createdAt: rule.createdAt })
+      recurringRules = recurringRules.map((x) => (x.id === param ? r : x))
+      return withNext(r) as T
+    }
+    if (method === 'DELETE') {
+      recurringRules = recurringRules.filter((x) => x.id !== param)
+      return undefined as T
+    }
   }
 
   // Goals -------------------------------------------------------------------

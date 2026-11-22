@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeftRight,
@@ -8,6 +9,7 @@ import {
   LogOut,
   MoreHorizontal,
   PieChart,
+  Repeat,
   Settings,
   Tag,
   Tags,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
+import { runRecurring } from '@/lib/recurring'
 import { ErrorBoundary } from './ErrorBoundary'
 import { OfflineBanner } from './OfflineBanner'
 
@@ -29,6 +32,7 @@ const primaryNav = [
 
 // Secondary screens — behind "More" on mobile, listed directly on desktop.
 const secondaryNav = [
+  { to: '/recurring', label: 'Recurring', icon: Repeat },
   { to: '/goals', label: 'Goals', icon: Target },
   { to: '/debts', label: 'Debts', icon: CreditCard },
   { to: '/reports', label: 'Reports', icon: BarChart3 },
@@ -103,6 +107,21 @@ function TabLink({
 export function AppShell() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  // Bumped when opening the app created recurring entries, so the screen on
+  // show reloads and includes them.
+  const [dataVersion, setDataVersion] = useState(0)
+
+  useEffect(() => {
+    let live = true
+    runRecurring()
+      .then((created) => {
+        if (live && created > 0) setDataVersion((v) => v + 1)
+      })
+      .catch(() => undefined) // offline or older server: nothing to add
+    return () => {
+      live = false
+    }
+  }, [])
 
   async function handleLogout() {
     await logout()
@@ -144,7 +163,7 @@ export function AppShell() {
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-8 lg:pt-6">
         <OfflineBanner />
         {/* Keyed by path so a crashed screen clears when you navigate away. */}
-        <ErrorBoundary key={pathname}>
+        <ErrorBoundary key={`${pathname}#${dataVersion}`}>
           <Outlet />
         </ErrorBoundary>
       </main>
