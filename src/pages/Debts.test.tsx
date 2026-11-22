@@ -62,9 +62,38 @@ describe('Debts page', () => {
     expect(screen.getByText('฿317,500')).toBeInTheDocument() // total owed
     expect(screen.getByText('Minimum payments ฿12,150/mo')).toBeInTheDocument()
     expect(screen.getByText('41% paid off · ฿480,000 borrowed')).toBeInTheDocument()
-    expect(screen.getByText('3.2% · ฿8,900/mo')).toBeInTheDocument()
+    expect(screen.getByText(/^3\.2% · ฿8,900\/mo · Paid off /)).toBeInTheDocument()
     // Only the 16% card is flagged.
     expect(screen.getAllByText('High interest')).toHaveLength(1)
+  })
+
+  it('shows when the debts are paid off and what the interest costs', async () => {
+    vi.mocked(api.listAccounts).mockResolvedValue([car, card])
+    const user = userEvent.setup()
+    render(<Debts />)
+
+    const status = await screen.findByRole('status')
+    expect(status).toHaveTextContent(/Debt-free by/)
+    const months = () => Number(/(\d+) months/.exec(status.textContent ?? '')![1])
+    const before = months()
+    // Avalanche (the default) is never more expensive than snowball.
+    expect(status).toHaveTextContent(/less than snowball|Same as snowball/)
+
+    await user.type(screen.getByLabelText(/extra per month/i), '10000')
+    expect(months()).toBeLessThan(before)
+  })
+
+  it('warns when payments never cover the interest', async () => {
+    const loanShark = debt({
+      id: 'x',
+      name: 'Loan',
+      currentBalance: 100_000,
+      interestRate: 60,
+      minPayment: 1_000,
+    })
+    vi.mocked(api.listAccounts).mockResolvedValue([loanShark])
+    render(<Debts />)
+    expect(await screen.findByRole('status')).toHaveTextContent(/never get paid off/i)
   })
 
   it('orders by highest rate (avalanche) or smallest balance (snowball)', async () => {
