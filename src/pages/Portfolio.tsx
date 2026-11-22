@@ -12,6 +12,7 @@ import { ApiError } from '@/lib/api'
 import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
 import {
   ASSET_CLASSES,
+  AUTO_PRICE_CLASSES,
   ASSET_CLASS_META,
   createDividend,
   createHolding,
@@ -105,6 +106,10 @@ function HoldingForm({
   const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '')
   const [avgCost, setAvgCost] = useState(initial ? String(initial.avgCost) : '')
   const [price, setPrice] = useState(initial ? String(initial.price) : '')
+  // New SET / US / crypto holdings follow the market unless switched off.
+  const [autoPrice, setAutoPrice] = useState(initial ? Boolean(initial.autoPrice) : true)
+  const canAutoPrice = AUTO_PRICE_CLASSES.includes(assetClass)
+  const followsMarket = canAutoPrice && autoPrice
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -118,7 +123,8 @@ function HoldingForm({
     if (avgCost.trim() === '' || !Number.isFinite(cost) || cost < 0) {
       return setError('Enter the average cost per unit.')
     }
-    if (price.trim() === '' || !Number.isFinite(current) || current < 0) {
+    const priceGiven = price.trim() !== ''
+    if (priceGiven ? !Number.isFinite(current) || current < 0 : !followsMarket) {
       return setError('Enter the current price per unit.')
     }
     setError(null)
@@ -130,7 +136,8 @@ function HoldingForm({
       currency,
       quantity: qty,
       avgCost: cost,
-      price: current,
+      ...(priceGiven && { price: current }),
+      autoPrice: followsMarket,
     }
     try {
       if (initial) await updateHolding(initial.id, input)
@@ -172,7 +179,12 @@ function HoldingForm({
               <select
                 id="holding-class"
                 value={assetClass}
-                onChange={(e) => setAssetClass(e.target.value as AssetClass)}
+                onChange={(e) => {
+                  const next = e.target.value as AssetClass
+                  setAssetClass(next)
+                  // US stocks and crypto are quoted in dollars.
+                  if (!initial) setCurrency(next === 'us' || next === 'crypto' ? 'USD' : 'THB')
+                }}
                 className={selectClass}
               >
                 {ASSET_CLASSES.map((c) => (
@@ -219,17 +231,34 @@ function HoldingForm({
             />
             <Input
               id="holding-price"
-              label="Current price / unit"
+              label={followsMarket ? 'Price / unit (optional)' : 'Current price / unit'}
               inputMode="decimal"
-              placeholder="0"
+              placeholder={followsMarket ? 'Looked up' : '0'}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
             />
           </div>
-          <p className="text-xs text-[var(--color-muted)]">
-            Prices aren't fetched automatically yet — update the current price here when you
-            want a fresh valuation.
-          </p>
+          {canAutoPrice ? (
+            <label className="flex items-center justify-between gap-3 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5">
+              <span className="text-sm text-[var(--color-ink)]">
+                Update price automatically
+                <span className="block text-xs text-[var(--color-muted)]">
+                  From the market each time you open Portfolio (delayed up to 15 min).
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={autoPrice}
+                onChange={(e) => setAutoPrice(e.target.checked)}
+                className="size-5 accent-brand-600"
+              />
+            </label>
+          ) : (
+            <p className="text-xs text-[var(--color-muted)]">
+              Prices for {ASSET_CLASS_META[assetClass].label.toLowerCase()} aren't fetched
+              automatically. Update the current price here when you want a fresh valuation.
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
@@ -253,6 +282,13 @@ function HoldingForm({
   )
 }
 
+/** "live" for a price from the last hour, otherwise when it was set. */
+function priceAge(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (ms < 60 * 60 * 1000) return 'live'
+  return `as of ${formatDate(iso)}`
+}
+
 function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding) => void }) {
   return (
     <button
@@ -270,6 +306,7 @@ function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding
         </p>
         <p className="tnum text-xs text-[var(--color-muted)]">
           {quantityText(holding.quantity)} · {native(holding.price, holding.currency)}
+          {holding.autoPrice && ` · ${priceAge(holding.priceUpdatedAt)}`}
         </p>
       </div>
       <div className="shrink-0 text-right">

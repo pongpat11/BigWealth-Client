@@ -164,14 +164,14 @@ let goals: Goal[] = [
 const MOCK_USD_THB = 34
 type StoredHolding = Pick<
   Holding,
-  'id' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt'
+  'id' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt' | 'autoPrice'
 >
 let holdings: StoredHolding[] = [
-  { id: 'h-ptt', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2) },
+  { id: 'h-ptt', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2), autoPrice: true },
   { id: 'h-cpall', symbol: 'CPALL', name: 'CP All', assetClass: 'set', currency: 'THB', quantity: 4000, avgCost: 62, price: 58.5, priceUpdatedAt: daysAgo(2) },
-  { id: 'h-voo', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1) },
+  { id: 'h-voo', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1), autoPrice: true },
   { id: 'h-kfsdiv', symbol: 'KFSDIV', name: 'Krungsri Dividend', assetClass: 'fund', currency: 'THB', quantity: 8200, avgCost: 18.2, price: 19.05, priceUpdatedAt: daysAgo(5) },
-  { id: 'h-btc', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1) },
+  { id: 'h-btc', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1), autoPrice: true },
   { id: 'h-gold', symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
 ]
 type StoredDividend = Omit<Dividend, 'net' | 'netTHB'>
@@ -409,7 +409,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
   }
   if (resource === 'holdings') {
     if (method === 'POST') {
-      const h = { ...(body as unknown as Omit<StoredHolding, 'id' | 'priceUpdatedAt'>), id: id(), priceUpdatedAt: now() }
+      const input = body as unknown as Omit<StoredHolding, 'id' | 'priceUpdatedAt' | 'price'> & { price?: number }
+      // No market feed in the mock: an auto-priced holding without a price gets its cost.
+      const h = { ...input, price: input.price ?? input.avgCost, id: id(), priceUpdatedAt: now() }
       holdings = [...holdings, h]
       return valued(h) as T
     }
