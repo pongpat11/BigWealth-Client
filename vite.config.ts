@@ -1,5 +1,5 @@
-/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
+import { configDefaults } from 'vitest/config'
 import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -22,5 +22,7 @@ export default defineConfig(({ command }) => ({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: true,
+    // Playwright specs run with `npm run e2e`, not Vitest.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 }))
