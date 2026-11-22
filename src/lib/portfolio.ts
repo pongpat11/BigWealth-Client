@@ -1,11 +1,15 @@
 // Portfolio API client: investment holdings and dividends. Prices are entered
-// by hand; the server converts USD to THB with a daily reference rate.
+// by hand, or kept current by the server for SET, US and crypto holdings with
+// autoPrice on. The server converts USD to THB with a daily reference rate.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
 import type { Currency } from '@/types'
 
 export const ASSET_CLASSES = ['set', 'us', 'fund', 'crypto', 'gold', 'cash'] as const
 export type AssetClass = (typeof ASSET_CLASSES)[number]
+
+/** Classes the server can price automatically from the market feed. */
+export const AUTO_PRICE_CLASSES: readonly AssetClass[] = ['set', 'us', 'crypto']
 
 /** Labels and chart colours (DESIGN_SPEC §3 categorical palette). */
 export const ASSET_CLASS_META: Record<AssetClass, { label: string; color: string }> = {
@@ -34,6 +38,8 @@ export interface Holding {
   avgCost: number
   price: number
   priceUpdatedAt: string
+  /** true when the server keeps the price current from the market. */
+  autoPrice?: boolean
   marketValue: number
   costBasis: number
   /** null when the holding is USD and there is no exchange rate. */
@@ -49,7 +55,9 @@ export interface HoldingInput {
   currency: Currency
   quantity: number
   avgCost: number
-  price: number
+  /** Optional when autoPrice is on: the server looks it up. */
+  price?: number
+  autoPrice: boolean
 }
 
 export interface Portfolio {

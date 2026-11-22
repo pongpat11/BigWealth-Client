@@ -127,7 +127,7 @@ describe('Portfolio page', () => {
     expect(await screen.findByText(/no holdings yet/i)).toBeInTheDocument()
   })
 
-  it('adds a holding and reloads the totals', async () => {
+  it('adds a stock that follows the market without entering a price', async () => {
     vi.mocked(api.createHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
     render(<Portfolio />)
@@ -137,7 +137,7 @@ describe('Portfolio page', () => {
     await user.type(screen.getByLabelText('Symbol'), 'cpall')
     await user.type(screen.getByLabelText('Quantity'), '4000')
     await user.type(screen.getByLabelText(/average cost/i), '62')
-    await user.type(screen.getByLabelText(/current price/i), '58.5')
+    expect(screen.getByRole('checkbox', { name: /update price automatically/i })).toBeChecked()
     await user.click(screen.getByRole('button', { name: /add holding/i }))
 
     await waitFor(() =>
@@ -148,10 +148,44 @@ describe('Portfolio page', () => {
         currency: 'THB',
         quantity: 4000,
         avgCost: 62,
-        price: 58.5,
+        autoPrice: true,
       }),
     )
     await waitFor(() => expect(api.getPortfolio).toHaveBeenCalledTimes(2))
+  })
+
+  it('requires a price when automatic prices are off or unavailable', async () => {
+    vi.mocked(api.createHolding).mockResolvedValue(ptt)
+    const user = userEvent.setup()
+    render(<Portfolio />)
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'gold')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    expect(screen.queryByRole('checkbox', { name: /update price automatically/i })).toBeNull()
+    await user.type(screen.getByLabelText('Quantity'), '2')
+    await user.type(screen.getByLabelText(/average cost/i), '41000')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    expect(await screen.findByText(/enter the current price/i)).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/current price/i), '44200')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    await waitFor(() =>
+      expect(api.createHolding).toHaveBeenCalledWith(
+        expect.objectContaining({ assetClass: 'gold', price: 44200, autoPrice: false }),
+      ),
+    )
+  })
+
+  it('picks dollars for US stocks and crypto', async () => {
+    const user = userEvent.setup()
+    render(<Portfolio />)
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'crypto')
+    expect(screen.getByLabelText('Currency')).toHaveValue('USD')
   })
 
   it('updates a price from the edit form', async () => {
