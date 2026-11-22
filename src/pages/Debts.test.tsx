@@ -83,6 +83,24 @@ describe('Debts page', () => {
     expect(months()).toBeLessThan(before)
   })
 
+  it('leaves debts without a rate or minimum out of the plan and says so', async () => {
+    const noRate = debt({ id: 'n', name: 'Family loan', currentBalance: 50_000, minPayment: 2_000 })
+    vi.mocked(api.listAccounts).mockResolvedValue([card, noRate])
+    render(<Debts />)
+
+    expect(await screen.findByText(/Planned debts paid off by/)).toBeInTheDocument()
+    expect(screen.getByText(/Not in the payoff plan yet/)).toHaveTextContent('Family loan')
+  })
+
+  it('explains the missing plan when no debt can be planned', async () => {
+    const noMin = debt({ id: 'n', name: 'Family loan', currentBalance: 50_000, interestRate: 0 })
+    vi.mocked(api.listAccounts).mockResolvedValue([noMin])
+    render(<Debts />)
+
+    expect(await screen.findByText(/Not in the payoff plan yet/)).toHaveTextContent('Family loan')
+    expect(screen.queryByLabelText(/extra per month/i)).toBeNull()
+  })
+
   it('warns when payments never cover the interest', async () => {
     const loanShark = debt({
       id: 'x',
