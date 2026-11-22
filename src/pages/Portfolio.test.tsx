@@ -161,8 +161,8 @@ describe('Portfolio page', () => {
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
-    await user.type(screen.getByLabelText('Symbol'), 'gold')
-    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    await user.type(screen.getByLabelText('Symbol'), 'kfsdiv')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'fund')
     expect(screen.queryByRole('checkbox', { name: /update price automatically/i })).toBeNull()
     await user.type(screen.getByLabelText('Quantity'), '2')
     await user.type(screen.getByLabelText(/average cost/i), '41000')
@@ -173,7 +173,28 @@ describe('Portfolio page', () => {
     await user.click(screen.getByRole('button', { name: /add holding/i }))
     await waitFor(() =>
       expect(api.createHolding).toHaveBeenCalledWith(
-        expect.objectContaining({ assetClass: 'gold', price: 44200, autoPrice: false }),
+        expect.objectContaining({ assetClass: 'fund', price: 44200, autoPrice: false }),
+      ),
+    )
+  })
+
+  it('offers an estimated gold price per baht-weight', async () => {
+    vi.mocked(api.createHolding).mockResolvedValue(ptt)
+    const user = userEvent.setup()
+    render(<Portfolio />)
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'gold')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    expect(screen.getByRole('checkbox', { name: /update price automatically/i })).toBeChecked()
+    expect(screen.getByText(/per baht-weight of 96.5% gold/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Quantity (baht-weight)'), '2')
+    await user.type(screen.getByLabelText(/average cost/i), '41000')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    await waitFor(() =>
+      expect(api.createHolding).toHaveBeenCalledWith(
+        expect.objectContaining({ assetClass: 'gold', currency: 'THB', quantity: 2, autoPrice: true }),
       ),
     )
   })

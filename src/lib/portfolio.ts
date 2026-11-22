@@ -9,7 +9,7 @@ export const ASSET_CLASSES = ['set', 'us', 'fund', 'crypto', 'gold', 'cash'] as 
 export type AssetClass = (typeof ASSET_CLASSES)[number]
 
 /** Classes the server can price automatically from the market feed. */
-export const AUTO_PRICE_CLASSES: readonly AssetClass[] = ['set', 'us', 'crypto']
+export const AUTO_PRICE_CLASSES: readonly AssetClass[] = ['set', 'us', 'crypto', 'gold']
 
 /** Labels and chart colours (DESIGN_SPEC §3 categorical palette). */
 export const ASSET_CLASS_META: Record<AssetClass, { label: string; color: string }> = {

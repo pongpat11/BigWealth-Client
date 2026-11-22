@@ -214,7 +214,7 @@ function HoldingForm({
           </div>
           <Input
             id="holding-quantity"
-            label="Quantity"
+            label={assetClass === 'gold' ? 'Quantity (baht-weight)' : 'Quantity'}
             inputMode="decimal"
             placeholder="0"
             value={quantity}
@@ -243,7 +243,9 @@ function HoldingForm({
               <span className="text-sm text-[var(--color-ink)]">
                 Update price automatically
                 <span className="block text-xs text-[var(--color-muted)]">
-                  From the market each time you open Portfolio (delayed up to 15 min).
+                  {assetClass === 'gold'
+                    ? 'Estimated per baht-weight of 96.5% gold from the world price; the shop price is a little higher.'
+                    : 'From the market each time you open Portfolio (delayed up to 15 min).'}
                 </span>
               </span>
               <input
