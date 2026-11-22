@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ApiError } from '@/lib/api'
 import {
@@ -47,12 +50,12 @@ function optionalNumber(value: string): number | null {
 function DebtForm({
   initial,
   onSaved,
-  onDeleted,
+  onDelete,
   onClose,
 }: {
   initial?: Account
   onSaved: (a: Account) => void
-  onDeleted: (id: string) => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -69,7 +72,6 @@ function DebtForm({
   )
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [armed, setArmed] = useState(false) // two-tap delete confirm
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -109,24 +111,6 @@ function DebtForm({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
       setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!initial) return
-    if (!armed) {
-      setArmed(true)
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await deleteAccount(initial.id)
-      onDeleted(initial.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-      setSaving(false)
-      setArmed(false)
     }
   }
 
@@ -207,14 +191,12 @@ function DebtForm({
           </div>
 
           {initial && (
-            <button
-              type="button"
-              onClick={handleDelete}
+            <DeleteButton
+              variant="block"
+              label="Delete debt"
+              onClick={onDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
-            >
-              {armed ? 'Tap again to delete' : 'Delete debt'}
-            </button>
+            />
           )}
         </form>
       </CardBody>
@@ -329,9 +311,17 @@ export function Debts() {
     closeForm()
   }
 
-  function handleDeleted(id: string) {
-    setDebts((prev) => (prev ?? []).filter((a) => a.id !== id))
+  const undoable = useUndoableDelete()
+
+  function handleDelete(debt: Account) {
     closeForm()
+    const index = (debts ?? []).findIndex((a) => a.id === debt.id)
+    undoable.remove({
+      message: `Deleted “${debt.name}”`,
+      hide: () => setDebts((prev) => (prev ?? []).filter((a) => a.id !== debt.id)),
+      restore: () => setDebts((prev) => reinsert(prev ?? [], debt, index)),
+      commit: () => deleteAccount(debt.id),
+    })
   }
 
   return (
@@ -357,14 +347,17 @@ export function Debts() {
       />
 
       {formOpen && (
-        <DebtForm
-          key={editing?.id ?? 'new'}
-          initial={editing ?? undefined}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
-          onClose={closeForm}
-        />
+        <Sheet label={editing ? 'Edit debt' : 'New debt'} onClose={closeForm}>
+          <DebtForm
+            key={editing?.id ?? 'new'}
+            initial={editing ?? undefined}
+            onSaved={handleSaved}
+            onDelete={() => editing && handleDelete(editing)}
+            onClose={closeForm}
+          />
+        </Sheet>
       )}
+      {undoable.toast}
 
       {error && (
         <Card>

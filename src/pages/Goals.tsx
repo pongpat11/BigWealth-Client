@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ApiError } from '@/lib/api'
 import {
@@ -38,12 +41,12 @@ function planLine(goal: Goal): string {
 function GoalForm({
   initial,
   onSaved,
-  onDeleted,
+  onDelete,
   onClose,
 }: {
   initial?: Goal
   onSaved: (g: Goal, isEdit: boolean) => void
-  onDeleted: (id: string) => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(initial?.name ?? '')
@@ -52,7 +55,6 @@ function GoalForm({
   const [deadline, setDeadline] = useState(initial?.deadline ?? '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [armed, setArmed] = useState(false) // two-tap delete confirm
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -84,24 +86,6 @@ function GoalForm({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
       setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!initial) return
-    if (!armed) {
-      setArmed(true)
-      return
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await deleteGoal(initial.id)
-      onDeleted(initial.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-      setSaving(false)
-      setArmed(false)
     }
   }
 
@@ -166,14 +150,12 @@ function GoalForm({
           </div>
 
           {initial && (
-            <button
-              type="button"
-              onClick={handleDelete}
+            <DeleteButton
+              variant="block"
+              label="Delete goal"
+              onClick={onDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
-            >
-              {armed ? 'Tap again to delete' : 'Delete goal'}
-            </button>
+            />
           )}
         </form>
       </CardBody>
@@ -246,9 +228,17 @@ export function Goals() {
     closeForm()
   }
 
-  function handleDeleted(id: string) {
-    setItems((prev) => (prev ?? []).filter((g) => g.id !== id))
+  const undoable = useUndoableDelete()
+
+  function handleDelete(goal: Goal) {
     closeForm()
+    const index = (items ?? []).findIndex((g) => g.id === goal.id)
+    undoable.remove({
+      message: `Deleted “${goal.name}”`,
+      hide: () => setItems((prev) => (prev ?? []).filter((g) => g.id !== goal.id)),
+      restore: () => setItems((prev) => reinsert(prev ?? [], goal, index)),
+      commit: () => deleteGoal(goal.id),
+    })
   }
 
   // Active goals first; reached ones sink to the bottom.
@@ -279,14 +269,17 @@ export function Goals() {
       />
 
       {formOpen && (
-        <GoalForm
-          key={editing?.id ?? 'new'}
-          initial={editing ?? undefined}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
-          onClose={closeForm}
-        />
+        <Sheet label={editing ? 'Edit goal' : 'New goal'} onClose={closeForm}>
+          <GoalForm
+            key={editing?.id ?? 'new'}
+            initial={editing ?? undefined}
+            onSaved={handleSaved}
+            onDelete={() => editing && handleDelete(editing)}
+            onClose={closeForm}
+          />
+        </Sheet>
       )}
+      {undoable.toast}
 
       {error && (
         <Card>

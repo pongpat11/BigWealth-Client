@@ -4,6 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { formatTHB } from '@/lib/format'
 import { ApiError } from '@/lib/api'
 import {
@@ -46,10 +49,12 @@ function signedBalance(a: Account): number {
 function AccountForm({
   initial,
   onSaved,
+  onDelete,
   onClose,
 }: {
   initial?: Account
   onSaved: (a: Account, isEdit: boolean) => void
+  onDelete?: () => void
   onClose: () => void
 }) {
   const isEdit = Boolean(initial)
@@ -181,6 +186,15 @@ function AccountForm({
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add account'}
             </Button>
           </div>
+
+          {isEdit && onDelete && (
+            <DeleteButton
+              variant="block"
+              label="Delete account"
+              onClick={onDelete}
+              disabled={saving}
+            />
+          )}
         </form>
       </CardBody>
     </Card>
@@ -196,7 +210,6 @@ function AccountRow({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const [armed, setArmed] = useState(false)
   const isDebt = account.type === 'debt'
   const shown = isDebt ? -account.currentBalance : account.currentBalance
 
@@ -221,19 +234,7 @@ function AccountRow({
         >
           {formatMoney(shown, account.currency)}
         </span>
-        <button
-          type="button"
-          onClick={() => (armed ? onDelete() : setArmed(true))}
-          onBlur={() => setArmed(false)}
-          className={
-            'shrink-0 text-xs font-medium transition-colors ' +
-            (armed
-              ? 'text-[var(--color-loss)]'
-              : 'text-[var(--color-muted)] hover:text-[var(--color-loss)]')
-          }
-        >
-          {armed ? 'Confirm?' : '×'}
-        </button>
+        <DeleteButton label={`Delete ${account.name}`} onClick={onDelete} className="-mr-2" />
       </div>
     </div>
   )
@@ -281,16 +282,20 @@ export function Accounts() {
     })
   }
 
-  async function handleDelete(id: string) {
-    const prev = items
-    setItems((list) => (list ?? []).filter((a) => a.id !== id))
-    try {
-      await deleteAccount(id)
-    } catch (err) {
-      setItems(prev) // roll back on failure
-      setError(err instanceof ApiError ? err.message : 'Could not delete account.')
-    }
+  const undoable = useUndoableDelete()
+
+  function handleDelete(account: Account) {
+    setEditingId(null)
+    const index = (items ?? []).findIndex((a) => a.id === account.id)
+    undoable.remove({
+      message: `Deleted “${account.name}”`,
+      hide: () => setItems((list) => (list ?? []).filter((a) => a.id !== account.id)),
+      restore: () => setItems((list) => reinsert(list ?? [], account, index)),
+      commit: () => deleteAccount(account.id),
+    })
   }
+
+  const editingAccount = items?.find((a) => a.id === editingId)
 
   return (
     <div className="space-y-4">
@@ -328,14 +333,31 @@ export function Accounts() {
       )}
 
       {adding && (
-        <AccountForm
-          onSaved={(a) => {
-            upsert(a)
-            setAdding(false)
-          }}
-          onClose={() => setAdding(false)}
-        />
+        <Sheet label="New account" onClose={() => setAdding(false)}>
+          <AccountForm
+            onSaved={(a) => {
+              upsert(a)
+              setAdding(false)
+            }}
+            onClose={() => setAdding(false)}
+          />
+        </Sheet>
       )}
+      {editingAccount && (
+        <Sheet label="Edit account" onClose={() => setEditingId(null)}>
+          <AccountForm
+            key={editingAccount.id}
+            initial={editingAccount}
+            onSaved={(a) => {
+              upsert(a)
+              setEditingId(null)
+            }}
+            onDelete={() => handleDelete(editingAccount)}
+            onClose={() => setEditingId(null)}
+          />
+        </Sheet>
+      )}
+      {undoable.toast}
 
       {error && (
         <Card>
@@ -382,30 +404,17 @@ export function Accounts() {
             </div>
             <Card>
               <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
-                {group.accounts.map((account) =>
-                  editingId === account.id ? (
-                    <div key={account.id} className="py-3">
-                      <AccountForm
-                        initial={account}
-                        onSaved={(a) => {
-                          upsert(a)
-                          setEditingId(null)
-                        }}
-                        onClose={() => setEditingId(null)}
-                      />
-                    </div>
-                  ) : (
-                    <AccountRow
-                      key={account.id}
-                      account={account}
-                      onEdit={() => {
-                        setEditingId(account.id)
-                        setAdding(false)
-                      }}
-                      onDelete={() => handleDelete(account.id)}
-                    />
-                  ),
-                )}
+                {group.accounts.map((account) => (
+                  <AccountRow
+                    key={account.id}
+                    account={account}
+                    onEdit={() => {
+                      setEditingId(account.id)
+                      setAdding(false)
+                    }}
+                    onDelete={() => handleDelete(account)}
+                  />
+                ))}
               </CardBody>
             </Card>
           </div>

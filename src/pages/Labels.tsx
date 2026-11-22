@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
 import {
   createLabel,
@@ -15,24 +17,6 @@ import {
 } from '@/lib/labels'
 
 const FALLBACK_COLOR = '#94a3b8'
-
-/** Inline "tap once to arm, tap again to confirm" delete button. */
-function DeleteButton({ onConfirm }: { onConfirm: () => void }) {
-  const [armed, setArmed] = useState(false)
-  return (
-    <button
-      type="button"
-      onClick={() => (armed ? onConfirm() : setArmed(true))}
-      onBlur={() => setArmed(false)}
-      className={
-        'text-xs font-medium transition-colors ' +
-        (armed ? 'text-[var(--color-loss)]' : 'text-[var(--color-muted)] hover:text-[var(--color-loss)]')
-      }
-    >
-      {armed ? 'Confirm delete?' : 'Delete'}
-    </button>
-  )
-}
 
 function NewLabelForm({
   onSaved,
@@ -97,11 +81,11 @@ function NewLabelForm({
 function LabelRow({
   label,
   onChanged,
-  onRemoved,
+  onDelete,
 }: {
   label: Label
   onChanged: (l: Label) => void
-  onRemoved: (id: string) => void
+  onDelete: (l: Label) => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(label.name)
@@ -119,15 +103,6 @@ function LabelRow({
       setRenaming(false)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not rename.')
-    }
-  }
-
-  async function handleDelete() {
-    try {
-      await deleteLabel(label.id)
-      onRemoved(label.id)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete.')
     }
   }
 
@@ -157,15 +132,19 @@ function LabelRow({
         {label.isDefault ? (
           <Badge tone="neutral">Default</Badge>
         ) : (
-          <div className="flex shrink-0 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={() => setRenaming((v) => !v)}
-              className="text-xs font-medium text-[var(--color-muted)]"
+              className="h-9 rounded-xl px-2 text-xs font-medium text-brand-600 hover:bg-[var(--color-canvas)]"
             >
-              Edit
+              Rename
             </button>
-            <DeleteButton onConfirm={handleDelete} />
+            <DeleteButton
+              label={`Delete ${label.name}`}
+              onClick={() => onDelete(label)}
+              className="-mr-2"
+            />
           </div>
         )}
       </div>
@@ -200,8 +179,16 @@ export function Labels() {
     })
   }
 
-  function remove(id: string) {
-    setItems((prev) => (prev ?? []).filter((l) => l.id !== id))
+  const undoable = useUndoableDelete()
+
+  function handleDelete(label: Label) {
+    const index = (items ?? []).findIndex((l) => l.id === label.id)
+    undoable.remove({
+      message: `Deleted “${label.name}”`,
+      hide: () => setItems((prev) => (prev ?? []).filter((l) => l.id !== label.id)),
+      restore: () => setItems((prev) => reinsert(prev ?? [], label, index)),
+      commit: () => deleteLabel(label.id),
+    })
   }
 
   const defaults = (items ?? []).filter((l) => l.isDefault)
@@ -220,6 +207,7 @@ export function Labels() {
         }
       />
 
+      {undoable.toast}
       {addingLabel && (
         <NewLabelForm
           onSaved={(l) => {
@@ -258,7 +246,7 @@ export function Labels() {
               <Card>
                 <CardBody className="divide-y divide-[var(--color-line)] py-0">
                   {defaults.map((l) => (
-                    <LabelRow key={l.id} label={l} onChanged={upsert} onRemoved={remove} />
+                    <LabelRow key={l.id} label={l} onChanged={upsert} onDelete={handleDelete} />
                   ))}
                 </CardBody>
               </Card>
@@ -279,7 +267,7 @@ export function Labels() {
               <Card>
                 <CardBody className="divide-y divide-[var(--color-line)] py-0">
                   {custom.map((l) => (
-                    <LabelRow key={l.id} label={l} onChanged={upsert} onRemoved={remove} />
+                    <LabelRow key={l.id} label={l} onChanged={upsert} onDelete={handleDelete} />
                   ))}
                 </CardBody>
               </Card>

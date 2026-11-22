@@ -128,7 +128,7 @@ describe('Budgets page', () => {
     expect(api.updateBudget).not.toHaveBeenCalled()
   })
 
-  it('removes a budget with a two-tap confirm', async () => {
+  it('removes a budget in one tap with an undo window', async () => {
     vi.mocked(api.getBudgets).mockResolvedValue(overview([food]))
     vi.mocked(api.deleteBudget).mockResolvedValue(undefined)
     const user = userEvent.setup()
@@ -136,8 +136,10 @@ describe('Budgets page', () => {
 
     await user.click(await screen.findByRole('button', { name: /edit food budget/i }))
     await user.click(screen.getByRole('button', { name: /remove budget/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /edit food budget/i })).not.toBeInTheDocument()
     expect(api.deleteBudget).not.toHaveBeenCalled()
-    await user.click(screen.getByRole('button', { name: /tap again to remove/i }))
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
 
     await waitFor(() => expect(api.deleteBudget).toHaveBeenCalledWith('b1'))
   })

@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { DeleteButton } from '@/components/ui/DeleteButton'
+import { Sheet } from '@/components/ui/Sheet'
+import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
 import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
 import {
@@ -87,10 +90,12 @@ function Message({ children }: { children: string }) {
 function HoldingForm({
   initial,
   onDone,
+  onDelete,
   onClose,
 }: {
   initial?: Holding
   onDone: () => void
+  onDelete: () => void
   onClose: () => void
 }) {
   const [symbol, setSymbol] = useState(initial?.symbol ?? '')
@@ -102,7 +107,6 @@ function HoldingForm({
   const [price, setPrice] = useState(initial ? String(initial.price) : '')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [armed, setArmed] = useState(false) // two-tap delete confirm
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -135,21 +139,6 @@ function HoldingForm({
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
       setSaving(false)
-    }
-  }
-
-  async function handleDelete() {
-    if (!initial) return
-    if (!armed) return setArmed(true)
-    setError(null)
-    setSaving(true)
-    try {
-      await deleteHolding(initial.id)
-      onDone()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-      setSaving(false)
-      setArmed(false)
     }
   }
 
@@ -251,14 +240,12 @@ function HoldingForm({
             </Button>
           </div>
           {initial && (
-            <button
-              type="button"
-              onClick={handleDelete}
+            <DeleteButton
+              variant="block"
+              label="Delete holding"
+              onClick={onDelete}
               disabled={saving}
-              className="w-full rounded-xl py-2 text-sm font-semibold text-[var(--color-loss)] transition-colors hover:bg-rose-500/10 disabled:opacity-50"
-            >
-              {armed ? 'Tap again to delete' : 'Delete holding'}
-            </button>
+            />
           )}
         </form>
       </CardBody>
@@ -503,7 +490,6 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
 }
 
 function DividendRow({ dividend, onDelete }: { dividend: Dividend; onDelete: () => void }) {
-  const [armed, setArmed] = useState(false)
   return (
     <tr className="border-t border-[var(--color-line)]">
       <th scope="row" className="py-3 pr-2 text-left font-normal">
@@ -526,21 +512,8 @@ function DividendRow({ dividend, onDelete }: { dividend: Dividend; onDelete: () 
       <td className="tnum pl-2 text-right text-sm font-semibold text-[var(--color-gain)]">
         {native(dividend.net, dividend.currency)}
       </td>
-      <td className="pl-3 text-right">
-        <button
-          type="button"
-          aria-label={armed ? `Confirm delete ${dividend.symbol} dividend` : `Delete ${dividend.symbol} dividend`}
-          onClick={() => (armed ? onDelete() : setArmed(true))}
-          onBlur={() => setArmed(false)}
-          className={
-            'text-xs font-medium transition-colors ' +
-            (armed
-              ? 'text-[var(--color-loss)]'
-              : 'text-[var(--color-muted)] hover:text-[var(--color-loss)]')
-          }
-        >
-          {armed ? 'Confirm?' : '×'}
-        </button>
+      <td className="w-10 pl-1 text-right">
+        <DeleteButton label={`Delete ${dividend.symbol} dividend`} onClick={onDelete} className="ml-auto" />
       </td>
     </tr>
   )
@@ -569,17 +542,25 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
     }
   }, [allYears, thisYear, reloadKey])
 
-  async function handleDelete(id: string) {
-    try {
-      await deleteDividend(id)
-      onChanged()
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete. Try again.')
-    }
+  const undoable = useUndoableDelete()
+
+  function handleDelete(dividend: Dividend) {
+    const index = (data?.items ?? []).findIndex((d) => d.id === dividend.id)
+    const setItems = (fn: (items: Dividend[]) => Dividend[]) =>
+      setData((list) => (list ? { ...list, items: fn(list.items) } : list))
+    undoable.remove({
+      message: `Deleted ${dividend.symbol} dividend`,
+      hide: () => setItems((items) => items.filter((d) => d.id !== dividend.id)),
+      restore: () => setItems((items) => reinsert(items, dividend, index)),
+      commit: () => deleteDividend(dividend.id),
+      // Totals come from the server.
+      onCommitted: onChanged,
+    })
   }
 
   return (
     <>
+      {undoable.toast}
       <div className="flex gap-2" role="group" aria-label="Dividend period">
         {[
           { all: false, label: String(thisYear) },
@@ -671,7 +652,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
                   </thead>
                   <tbody>
                     {data.items.map((d) => (
-                      <DividendRow key={d.id} dividend={d} onDelete={() => handleDelete(d.id)} />
+                      <DividendRow key={d.id} dividend={d} onDelete={() => handleDelete(d)} />
                     ))}
                   </tbody>
                 </table>
@@ -715,6 +696,22 @@ export function Portfolio() {
   function handleChanged() {
     setForm('closed')
     setReloadKey((k) => k + 1)
+  }
+
+  const undoable = useUndoableDelete()
+
+  function handleDeleteHolding(holding: Holding) {
+    setForm('closed')
+    const index = (portfolio?.holdings ?? []).findIndex((h) => h.id === holding.id)
+    const setHoldings = (fn: (rows: Holding[]) => Holding[]) =>
+      setPortfolio((p) => (p ? { ...p, holdings: fn(p.holdings) } : p))
+    undoable.remove({
+      message: `Deleted ${holding.symbol}`,
+      hide: () => setHoldings((rows) => rows.filter((h) => h.id !== holding.id)),
+      restore: () => setHoldings((rows) => reinsert(rows, holding, index)),
+      commit: () => deleteHolding(holding.id),
+      onCommitted: () => setReloadKey((k) => k + 1),
+    })
   }
 
   function switchTab(next: Tab) {
@@ -786,16 +783,22 @@ export function Portfolio() {
       </div>
 
       {form !== 'closed' && tab === 'holdings' && (
-        <HoldingForm
-          key={form === 'new' ? 'new' : form.id}
-          initial={form === 'new' ? undefined : form}
-          onDone={handleChanged}
-          onClose={() => setForm('closed')}
-        />
+        <Sheet label={form === 'new' ? 'New holding' : 'Edit holding'} onClose={() => setForm('closed')}>
+          <HoldingForm
+            key={form === 'new' ? 'new' : form.id}
+            initial={form === 'new' ? undefined : form}
+            onDone={handleChanged}
+            onDelete={() => form !== 'new' && handleDeleteHolding(form)}
+            onClose={() => setForm('closed')}
+          />
+        </Sheet>
       )}
       {form === 'new' && tab === 'dividends' && (
-        <DividendForm onDone={handleChanged} onClose={() => setForm('closed')} />
+        <Sheet label="New dividend" onClose={() => setForm('closed')}>
+          <DividendForm onDone={handleChanged} onClose={() => setForm('closed')} />
+        </Sheet>
       )}
+      {undoable.toast}
 
       {tab === 'holdings' && portfolio !== null && (
         <>

@@ -165,7 +165,17 @@ Build each as a Figma component with variants. States to cover everywhere: **def
 - **Horizontal bars** — spending by category.
 
 ### Feedback
-- Toast/snackbar (top, auto-dismiss), inline alert (info/success/warn/error), skeleton loaders (shimmer on canvas), empty-state (centered icon + title + subtitle + CTA), error-state (retry button).
+- Toast/snackbar (bottom, above the tab bar on mobile; bottom-right on desktop; auto-dismiss), inline alert (info/success/warn/error), skeleton loaders (shimmer on canvas), empty-state (centered icon + title + subtitle + CTA), error-state (retry button).
+
+### Delete pattern (all screens)
+- **One tap, then Undo — never "tap twice to confirm".** The item leaves the list at once and an undo snackbar ("Deleted “Wallet”" · **Undo** · ×) stays for 5 s with a countdown line. The API call is sent when the snackbar closes (timeout, ×, a second delete, leaving the screen, or closing the app). If the server refuses, the item comes back and a red snackbar gives the reason.
+- **Row-level:** a 40 px trash icon (`DeleteButton`, muted → loss red on hover), labelled "Delete ‹name›" for screen readers. Default (built-in) items show a *Default* badge instead.
+- **In an edit sheet:** full-width "Delete ‹thing›" text button with a trash icon under Cancel / Save; tapping it closes the sheet.
+- Deleting a category also removes its sub-categories; the snackbar says so ("… and 2 sub-categories") and Undo restores them all.
+- Code: `useUndoableDelete` (`src/lib/useUndoableDelete.tsx`), `DeleteButton`, `UndoToast`.
+
+### Sheet (add / edit forms)
+- Forms open in a `Sheet`: bottom sheet on phones, centred dialog ≥ 640 px, over a dimmed backdrop. Opening a row's editor never scrolls the list; Escape or tapping the backdrop closes it. Inline forms remain only for one-field adds (new category, sub-category, label).
 
 ---
 
