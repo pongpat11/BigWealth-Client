@@ -244,7 +244,7 @@ function HoldingForm({
                 Update price automatically
                 <span className="block text-xs text-[var(--color-muted)]">
                   {assetClass === 'gold'
-                    ? 'Estimated per baht-weight of 96.5% gold from the world price; the shop price is a little higher.'
+                    ? 'Estimated per baht-weight of 96.5% gold (in THB) from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.'
                     : 'From the market each time you open Portfolio (delayed up to 15 min).'}
                 </span>
               </span>
