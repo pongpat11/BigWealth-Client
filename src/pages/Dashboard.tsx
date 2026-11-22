@@ -11,6 +11,7 @@ import {
   Tooltip,
   XAxis,
 } from 'recharts'
+import { AlertsCard } from '@/components/AlertsCard'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
@@ -219,6 +220,8 @@ export function Dashboard() {
               </CardBody>
             </Card>
           </div>
+
+          <AlertsCard />
 
           {/* Cash flow */}
           <Card>
