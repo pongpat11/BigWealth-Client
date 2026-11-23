@@ -20,7 +20,9 @@ import {
   deleteHolding,
   getPortfolio,
   listDividends,
+  sortHoldings,
   updateHolding,
+  type HoldingSort,
   type AssetClass,
   type Dividend,
   type DividendList,
@@ -332,6 +334,7 @@ function HoldingsTab({
   portfolio: PortfolioData
   onEdit: (h: Holding) => void
 }) {
+  const [sortBy, setSortBy] = useState<HoldingSort>('value')
   if (portfolio.holdings.length === 0) {
     return (
       <Card>
@@ -395,8 +398,38 @@ function HoldingsTab({
         </Card>
       )}
 
+      {portfolio.holdings.length > 1 && (
+        <div className="flex items-center justify-end gap-1" role="group" aria-label="Sort holdings">
+          <span className="mr-1 text-xs text-[var(--color-muted)]">Sort</span>
+          {(
+            [
+              ['value', 'Value'],
+              ['gain', 'Gain'],
+              ['symbol', 'A–Z'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={sortBy === value}
+              onClick={() => setSortBy(value)}
+              className={
+                'rounded-full px-2.5 py-1 text-xs font-medium transition-colors ' +
+                (sortBy === value
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {ASSET_CLASSES.map((assetClass) => {
-        const rows = portfolio.holdings.filter((h) => h.assetClass === assetClass)
+        const rows = sortHoldings(
+          portfolio.holdings.filter((h) => h.assetClass === assetClass),
+          sortBy,
+        )
         if (rows.length === 0) return null
         return (
           <section key={assetClass} aria-label={ASSET_CLASS_META[assetClass].label} className="space-y-1.5">

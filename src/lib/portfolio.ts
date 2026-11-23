@@ -132,3 +132,18 @@ export async function createDividend(input: DividendInput): Promise<Dividend> {
 export async function deleteDividend(id: string): Promise<void> {
   await apiFetch<void>(`/dividends/${id}`, { method: 'DELETE', ...auth() })
 }
+
+export type HoldingSort = 'value' | 'gain' | 'symbol'
+
+/**
+ * Holdings in display order: largest THB value first, best return first, or
+ * by symbol. Holdings without a THB value or a return go last.
+ */
+export function sortHoldings(rows: Holding[], by: HoldingSort): Holding[] {
+  const last = Number.NEGATIVE_INFINITY
+  return [...rows].sort((a, b) => {
+    if (by === 'symbol') return a.symbol.localeCompare(b.symbol)
+    const key = (h: Holding) => (by === 'value' ? (h.marketValueTHB ?? last) : (h.gainPct ?? last))
+    return key(b) - key(a) || a.symbol.localeCompare(b.symbol)
+  })
+}
