@@ -17,6 +17,7 @@ import {
   type Account,
 } from '@/lib/accounts'
 import { formatTHB } from '@/lib/format'
+import { monthsFromNow, simulatePayoff, type PayoffDebt } from '@/lib/payoff'
 
 /** Annual rate at or above which a debt is flagged as expensive. */
 const HIGH_RATE = 15
@@ -43,6 +44,20 @@ function sortDebts(debts: Account[], strategy: Strategy): Account[] {
 }
 
 /** '' → null (clear); otherwise the parsed number, or NaN when invalid. */
+/** THB debts with a minimum payment and a known rate (blank is unknown, not 0%). */
+function plannable(d: Account): boolean {
+  return d.currency === 'THB' && (d.minPayment ?? 0) > 0 && d.interestRate != null
+}
+
+function toPlan(list: Account[]): PayoffDebt[] {
+  return list.filter(plannable).map((d) => ({
+    id: d.id,
+    balance: d.currentBalance,
+    rate: d.interestRate ?? 0,
+    minPayment: d.minPayment ?? 0,
+  }))
+}
+
 function optionalNumber(value: string): number | null {
   return value.trim() === '' ? null : Number(value)
 }
@@ -207,10 +222,13 @@ function DebtForm({
 function DebtRow({
   debt,
   order,
+  paidOffIn,
   onEdit,
 }: {
   debt: Account
   order: number
+  /** Months until cleared under the current plan, when known. */
+  paidOffIn?: number
   onEdit: (a: Account) => void
 }) {
   const owed = debt.currentBalance
@@ -221,6 +239,7 @@ function DebtRow({
   const terms = [
     debt.interestRate != null ? `${debt.interestRate}%` : null,
     debt.minPayment != null ? `${money(debt.minPayment, debt.currency)}/mo` : null,
+    paidOffIn !== undefined ? `Paid off ${monthsFromNow(paidOffIn)}` : null,
   ].filter(Boolean)
 
   return (
@@ -273,6 +292,7 @@ export function Debts() {
   const [debts, setDebts] = useState<Account[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [strategy, setStrategy] = useState<Strategy>('avalanche')
+  const [extra, setExtra] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Account | null>(null)
 
@@ -295,6 +315,18 @@ export function Debts() {
   const totalOwed = thb.reduce((s, d) => s + d.currentBalance, 0)
   const totalMin = thb.reduce((s, d) => s + (d.minPayment ?? 0), 0)
   const foreignCount = ordered.length - thb.length
+
+  // The plan covers plannable debts (see `plannable`); others are listed as gaps.
+  const extraValue = Math.max(Number(extra) || 0, 0)
+  const plan = useMemo(() => simulatePayoff(toPlan(ordered), extraValue), [ordered, extraValue])
+  const otherStrategy: Strategy = strategy === 'avalanche' ? 'snowball' : 'avalanche'
+  const otherPlan = useMemo(
+    () => simulatePayoff(toPlan(sortDebts(debts ?? [], otherStrategy)), extraValue),
+    [debts, otherStrategy, extraValue],
+  )
+  const planned = toPlan(ordered)
+  const unplanned = thb.filter((d) => !plannable(d) && d.currentBalance > 0)
+  const interestDiff = otherPlan.totalInterest - plan.totalInterest
 
   function closeForm() {
     setFormOpen(false)
@@ -434,6 +466,69 @@ export function Debts() {
             </p>
           </div>
 
+          {(planned.length > 0 || unplanned.length > 0) && (
+            <Card>
+              <CardBody className="space-y-3">
+                {planned.length > 0 && (
+                  <>
+                  <Input
+                    id="payoff-extra"
+                    label="Extra per month (฿)"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="100"
+                    placeholder="0"
+                    value={extra}
+                    onChange={(e) => setExtra(e.target.value)}
+                  />
+                  {plan.months === null ? (
+                    <p role="status" className="text-sm text-[var(--color-loss)]">
+                      The payments don't cover the interest, so these debts never get paid off.
+                      Add an extra amount per month.
+                    </p>
+                  ) : (
+                    <div role="status" className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-[var(--color-muted)]">
+                          {unplanned.length > 0 ? 'Planned debts paid off by' : 'Debt-free by'}
+                        </p>
+                        <p className="tnum text-lg font-bold text-[var(--color-ink)]">
+                          {monthsFromNow(plan.months)}
+                        </p>
+                        <p className="tnum text-xs text-[var(--color-muted)]">
+                          {plan.months} {plan.months === 1 ? 'month' : 'months'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-[var(--color-muted)]">Interest you'll pay</p>
+                        <p className="tnum text-lg font-bold text-[var(--color-loss)]">
+                          {formatTHB(plan.totalInterest)}
+                        </p>
+                        <p className="tnum text-xs text-[var(--color-muted)]">
+                          {otherPlan.months === null
+                            ? `${otherStrategy[0].toUpperCase()}${otherStrategy.slice(1)} never pays off`
+                            : interestDiff > 0.5
+                              ? `${formatTHB(interestDiff)} less than ${otherStrategy}`
+                              : interestDiff < -0.5
+                              ? `${formatTHB(-interestDiff)} more than ${otherStrategy}`
+                              : `Same as ${otherStrategy}`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  </>
+                )}
+                {unplanned.length > 0 && (
+                  <p className="text-xs text-[var(--color-muted)]">
+                    Not in the payoff plan yet (add a minimum payment and interest rate):{' '}
+                    {unplanned.map((d) => d.name).join(', ')}
+                  </p>
+                )}
+              </CardBody>
+            </Card>
+          )}
+
           <Card>
             <CardBody className="divide-y divide-[var(--color-line)] py-0">
               {ordered.map((debt, i) => (
@@ -441,6 +536,7 @@ export function Debts() {
                   key={debt.id}
                   debt={debt}
                   order={i + 1}
+                  paidOffIn={plan.months === null ? undefined : plan.paidOffMonth[debt.id]}
                   onEdit={(a) => {
                     setEditing(a)
                     setFormOpen(true)
