@@ -36,15 +36,17 @@ let labels: Label[] = [
   { id: 'reimburse', name: 'Reimbursable', color: '#f59e0b', isDefault: false },
 ]
 
-// Stored form holds the starting balance; currentBalance is derived on read.
-type StoredAccount = Omit<Account, 'currentBalance'>
+// Stored form holds the starting balance; cash, holdings and currentBalance are derived on read.
+type StoredAccount = Omit<Account, 'currentBalance' | 'cashBalance' | 'holdingsValue'>
 
 let accounts: StoredAccount[] = [
   { id: 'kbank', name: 'KBank Savings', institution: 'Kasikornbank', type: 'bank', currency: 'THB', balance: 285_400, createdAt: daysAgo(120) },
   { id: 'scb', name: 'SCB Current', institution: 'Siam Commercial', type: 'bank', currency: 'THB', balance: 64_200, createdAt: daysAgo(118) },
   { id: 'cash', name: 'Cash Wallet', institution: null, type: 'cash', currency: 'THB', balance: 5_800, createdAt: daysAgo(110) },
-  { id: 'settrade', name: 'SET Brokerage', institution: 'Settrade', type: 'investment', currency: 'THB', balance: 612_000, createdAt: daysAgo(90) },
-  { id: 'ibkr', name: 'IBKR (US)', institution: 'Interactive Brokers', type: 'investment', currency: 'USD', balance: 14_850, createdAt: daysAgo(60) },
+  // Investment balances are uninvested cash; linked holdings add to the value.
+  { id: 'settrade', name: 'SET Brokerage', institution: 'Settrade', type: 'investment', currency: 'THB', balance: 48_500, createdAt: daysAgo(90) },
+  { id: 'ibkr', name: 'IBKR (US)', institution: 'Interactive Brokers', type: 'investment', currency: 'USD', balance: 8_900, createdAt: daysAgo(60) },
+  { id: 'binance', name: 'Binance', institution: null, type: 'investment', currency: 'USD', balance: 150, createdAt: daysAgo(58) },
   // Debt balance is stored positive (amount owed); the UI renders it negative.
   { id: 'card', name: 'KBank Credit Card', institution: 'Kasikornbank', type: 'debt', currency: 'THB', balance: 32_500, interestRate: 16, minPayment: 3_250, originalAmount: null, createdAt: daysAgo(100) },
   { id: 'car', name: 'Car Loan', institution: 'TTB', type: 'debt', currency: 'THB', balance: 285_000, interestRate: 3.2, minPayment: 8_900, originalAmount: 480_000, createdAt: daysAgo(95) },
@@ -62,6 +64,24 @@ function txAccount(accId: string | null): TransactionAccount | null {
 }
 
 /** Derive currentBalance = starting balance ± this account's transactions. */
+/** Linked holdings' market value in the account's currency (mock rate). */
+function holdingsValueOf(a: StoredAccount): number {
+  let total = 0
+  for (const h of holdings) {
+    if (h.accountId !== a.id) continue
+    const value = h.quantity * h.price
+    total += h.currency === a.currency ? value : h.currency === 'USD' ? value * MOCK_USD_THB : value / MOCK_USD_THB
+  }
+  return Math.round(total * 100) / 100
+}
+
+/** 400 unless `accountId` is one of the investment accounts, like the server. */
+function assertInvestmentAccount(accountId: unknown): void {
+  if (accountId === undefined) return
+  const a = accounts.find((x) => x.id === accountId)
+  if (!a || a.type !== 'investment') throw new ApiError(400, 'Invalid account')
+}
+
 function withCurrentBalance(a: StoredAccount): Account {
   let income = 0
   let expense = 0
@@ -71,7 +91,9 @@ function withCurrentBalance(a: StoredAccount): Account {
     else expense += t.amount
   }
   const delta = a.type === 'debt' ? expense - income : income - expense
-  return { ...a, currentBalance: a.balance + delta }
+  const cashBalance = a.balance + delta
+  const holdingsValue = holdingsValueOf(a)
+  return { ...a, cashBalance, holdingsValue, currentBalance: cashBalance + holdingsValue }
 }
 
 interface TxSeed {
@@ -164,21 +186,21 @@ let goals: Goal[] = [
 const MOCK_USD_THB = 34
 type StoredHolding = Pick<
   Holding,
-  'id' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt' | 'autoPrice'
+  'id' | 'accountId' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt' | 'autoPrice'
 >
 let holdings: StoredHolding[] = [
-  { id: 'h-ptt', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2), autoPrice: true },
-  { id: 'h-cpall', symbol: 'CPALL', name: 'CP All', assetClass: 'set', currency: 'THB', quantity: 4000, avgCost: 62, price: 58.5, priceUpdatedAt: daysAgo(2) },
-  { id: 'h-voo', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1), autoPrice: true },
-  { id: 'h-kfsdiv', symbol: 'KFSDIV', name: 'Krungsri Dividend', assetClass: 'fund', currency: 'THB', quantity: 8200, avgCost: 18.2, price: 19.05, priceUpdatedAt: daysAgo(5) },
-  { id: 'h-btc', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1), autoPrice: true },
-  { id: 'h-gold', symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
+  { id: 'h-ptt', accountId: 'settrade', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2), autoPrice: true },
+  { id: 'h-cpall', accountId: 'settrade', symbol: 'CPALL', name: 'CP All', assetClass: 'set', currency: 'THB', quantity: 4000, avgCost: 62, price: 58.5, priceUpdatedAt: daysAgo(2) },
+  { id: 'h-voo', accountId: 'ibkr', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1), autoPrice: true },
+  { id: 'h-kfsdiv', accountId: 'settrade', symbol: 'KFSDIV', name: 'Krungsri Dividend', assetClass: 'fund', currency: 'THB', quantity: 8200, avgCost: 18.2, price: 19.05, priceUpdatedAt: daysAgo(5) },
+  { id: 'h-btc', accountId: 'binance', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1), autoPrice: true },
+  { id: 'h-gold', accountId: null, symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
 ]
 type StoredDividend = Omit<Dividend, 'net' | 'netTHB'>
 let dividendRows: StoredDividend[] = [
-  { id: 'd-ptt', symbol: 'PTT', payDate: dateIn(-40), currency: 'THB', gross: 2400, withholdingTax: 240 },
-  { id: 'd-voo', symbol: 'VOO', payDate: dateIn(-75), currency: 'USD', gross: 20.4, withholdingTax: 3.06 },
-  { id: 'd-cpall', symbol: 'CPALL', payDate: dateIn(-190), currency: 'THB', gross: 4000, withholdingTax: 400 },
+  { id: 'd-ptt', accountId: 'settrade', symbol: 'PTT', payDate: dateIn(-40), currency: 'THB', gross: 2400, withholdingTax: 240 },
+  { id: 'd-voo', accountId: 'ibkr', symbol: 'VOO', payDate: dateIn(-75), currency: 'USD', gross: 20.4, withholdingTax: 3.06 },
+  { id: 'd-cpall', accountId: 'settrade', symbol: 'CPALL', payDate: dateIn(-190), currency: 'THB', gross: 4000, withholdingTax: 400 },
 ]
 const thbFactor = (currency: string) => (currency === 'USD' ? MOCK_USD_THB : 1)
 function valued(h: StoredHolding): Holding {
@@ -283,6 +305,14 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     const acc = accounts.find((x) => x.id === param)
     if (!acc) notFound('Account')
     if (method === 'PATCH') {
+      if (
+        body?.type !== undefined &&
+        body.type !== 'investment' &&
+        acc.type === 'investment' &&
+        holdings.some((h) => h.accountId === acc.id)
+      ) {
+        throw new ApiError(400, 'Move or delete the holdings in this account before changing its type')
+      }
       const updated: StoredAccount = {
         ...acc,
         ...(body?.name !== undefined && { name: String(body.name) }),
@@ -303,6 +333,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       accounts = accounts.filter((x) => x.id !== param)
+      // ON DELETE SET NULL, as on the server.
+      holdings = holdings.map((h) => (h.accountId === param ? { ...h, accountId: null } : h))
+      dividendRows = dividendRows.map((d) => (d.accountId === param ? { ...d, accountId: null } : d))
       return undefined as T
     }
   }
@@ -381,8 +414,12 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
 
   // Portfolio ---------------------------------------------------------------
   const mockFx = { usdThb: MOCK_USD_THB, date: now().slice(0, 10) }
+  // `?accountId=<id>` keeps one account's rows; `none` keeps unassigned ones.
+  const accountQuery = new URLSearchParams(path.split('?')[1] ?? '').get('accountId')
+  const inAccount = (row: { accountId?: string | null }) =>
+    accountQuery === null || (row.accountId ?? null) === (accountQuery === 'none' ? null : accountQuery)
   if (resource === 'portfolio' && method === 'GET') {
-    const rows = holdings.map(valued)
+    const rows = holdings.filter(inAccount).map(valued)
     const totalValueTHB = rows.reduce((s, h) => s + (h.marketValueTHB ?? 0), 0)
     const totalCostTHB = rows.reduce((s, h) => s + (h.costBasisTHB ?? 0), 0)
     const byClass = new Map<Holding['assetClass'], number>()
@@ -410,14 +447,16 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
   if (resource === 'holdings') {
     if (method === 'POST') {
       const input = body as unknown as Omit<StoredHolding, 'id' | 'priceUpdatedAt' | 'price'> & { price?: number }
+      assertInvestmentAccount(input.accountId)
       // No market feed in the mock: an auto-priced holding without a price gets its cost.
-      const h = { ...input, price: input.price ?? input.avgCost, id: id(), priceUpdatedAt: now() }
+      const h = { ...input, accountId: input.accountId ?? null, price: input.price ?? input.avgCost, id: id(), priceUpdatedAt: now() }
       holdings = [...holdings, h]
       return valued(h) as T
     }
     const existing = holdings.find((x) => x.id === param)
     if (!existing) notFound('Holding')
     if (method === 'PATCH') {
+      assertInvestmentAccount(body?.accountId)
       const updated = { ...existing, ...(body as Partial<StoredHolding>), priceUpdatedAt: now() }
       holdings = holdings.map((x) => (x.id === param ? updated : x))
       return valued(updated) as T
@@ -431,7 +470,7 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     if (method === 'GET') {
       const year = new URLSearchParams(path.split('?')[1] ?? '').get('year')
       const items = dividendRows
-        .filter((d) => !year || d.payDate.startsWith(year))
+        .filter((d) => (!year || d.payDate.startsWith(year)) && inAccount(d))
         .sort((a, b) => b.payDate.localeCompare(a.payDate))
         .map(withNet)
       const totalGrossTHB = items.reduce((s, d) => s + d.gross * thbFactor(d.currency), 0)
@@ -447,7 +486,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       return list as T
     }
     if (method === 'POST') {
-      const d = { ...(body as unknown as Omit<StoredDividend, 'id'>), id: id() }
+      assertInvestmentAccount(body?.accountId)
+      const input = body as unknown as Omit<StoredDividend, 'id'>
+      const d = { ...input, accountId: input.accountId ?? null, id: id() }
       dividendRows = [...dividendRows, d]
       return withNet(d) as T
     }

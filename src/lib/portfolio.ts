@@ -30,6 +30,8 @@ export interface Fx {
 
 export interface Holding {
   id: string
+  /** Investment account holding it; null when not assigned yet. */
+  accountId?: string | null
   symbol: string
   name: string | null
   assetClass: AssetClass
@@ -59,6 +61,8 @@ export interface HoldingInput {
   /** Optional when autoPrice is on: the server looks it up. */
   price?: number
   autoPrice: boolean
+  /** Investment account that holds it (the form requires one). */
+  accountId?: string
 }
 
 export interface Portfolio {
@@ -75,6 +79,7 @@ export interface Portfolio {
 
 export interface Dividend {
   id: string
+  accountId?: string | null
   symbol: string
   payDate: string // 'YYYY-MM-DD'
   currency: Currency
@@ -90,6 +95,7 @@ export interface DividendInput {
   currency: Currency
   gross: number
   withholdingTax: number
+  accountId?: string
 }
 
 export interface DividendList {
@@ -105,8 +111,19 @@ function auth() {
   return { token: getAccessToken() ?? undefined }
 }
 
-export async function getPortfolio(): Promise<Portfolio> {
-  return apiFetch<Portfolio>('/portfolio', auth())
+/** Account filter: an account id, or `none` for holdings without one. */
+export const NO_ACCOUNT = 'none'
+
+function query(params: Record<string, string | number | undefined>): string {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') q.set(k, String(v))
+  const s = q.toString()
+  return s ? `?${s}` : ''
+}
+
+/** Holdings and totals; pass `accountId` (or NO_ACCOUNT) to narrow to one account. */
+export async function getPortfolio(accountId?: string): Promise<Portfolio> {
+  return apiFetch<Portfolio>(`/portfolio${query({ accountId })}`, auth())
 }
 
 export async function createHolding(input: HoldingInput): Promise<Holding> {
@@ -121,9 +138,9 @@ export async function deleteHolding(id: string): Promise<void> {
   await apiFetch<void>(`/holdings/${id}`, { method: 'DELETE', ...auth() })
 }
 
-/** Dividends, newest first. Omit `year` for all of them. */
-export async function listDividends(year?: number): Promise<DividendList> {
-  return apiFetch<DividendList>(`/dividends${year ? `?year=${year}` : ''}`, auth())
+/** Dividends, newest first. Omit `year` for all of them, `accountId` for every account. */
+export async function listDividends(year?: number, accountId?: string): Promise<DividendList> {
+  return apiFetch<DividendList>(`/dividends${query({ year: year || undefined, accountId })}`, auth())
 }
 
 export async function createDividend(input: DividendInput): Promise<Dividend> {

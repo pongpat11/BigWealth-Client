@@ -140,7 +140,13 @@ export function AccountForm({
             <div className="flex-1">
               <Input
                 id="account-balance"
-                label={type === 'debt' ? t('Starting amount owed') : t('Starting balance')}
+                label={
+                  type === 'debt'
+                    ? t('Starting amount owed')
+                    : type === 'investment'
+                      ? t('Starting cash balance')
+                      : t('Starting balance')
+                }
                 inputMode="decimal"
                 placeholder="0"
                 value={balance}
@@ -165,6 +171,12 @@ export function AccountForm({
               </select>
             </div>
           </div>
+
+          {type === 'investment' && (
+            <p className="text-xs text-[var(--color-muted)]">
+              {t('Only the uninvested cash. Holdings linked to this account in Portfolio are added to its value.')}
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>

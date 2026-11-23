@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -7,7 +7,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Sheet } from '@/components/ui/Sheet'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatPercent } from '@/lib/format'
+import { getPortfolio, type Holding } from '@/lib/portfolio'
 import { listTransactionPage, type Transaction } from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
 import { t } from '@/lib/i18n'
@@ -51,6 +52,96 @@ function TxRow({ tx }: { tx: Transaction }) {
   )
 }
 
+/** A holding in this account: symbol, quantity, value in its currency, return. */
+function HoldingLine({ holding }: { holding: Holding }) {
+  const gain = holding.gainPct
+  return (
+    <div className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{holding.symbol}</p>
+        <p className="tnum text-xs text-[var(--color-muted)]">
+          {holding.quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="tnum text-sm font-semibold text-[var(--color-ink)]">
+          {formatMoney(holding.marketValue, holding.currency === 'USD' ? 'USD' : 'THB')}
+        </p>
+        <p
+          className={
+            'tnum text-xs font-medium ' +
+            (gain === null || gain === 0
+              ? 'text-[var(--color-muted)]'
+              : gain > 0
+                ? 'text-[var(--color-gain)]'
+                : 'text-[var(--color-loss)]')
+          }
+        >
+          {gain === null ? '—' : `${gain > 0 ? '▲' : gain < 0 ? '▼' : ''} ${formatPercent(gain)}`.trim()}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/** Holdings linked to an investment account, loaded on their own so a slow price feed never holds up the page. */
+function AccountHoldings({
+  accountId,
+  onLoaded,
+}: {
+  accountId: string
+  /** Called once the holdings (and their refreshed prices) are in. */
+  onLoaded: () => void
+}) {
+  const [holdings, setHoldings] = useState<Holding[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    getPortfolio(accountId)
+      .then((p) => {
+        if (!live) return
+        setHoldings(p.holdings)
+        onLoaded()
+      })
+      .catch(() => live && setFailed(true))
+    return () => {
+      live = false
+    }
+  }, [accountId, onLoaded])
+
+  return (
+    <Card>
+      <CardHeader
+        title={t('Holdings')}
+        action={
+          <Link
+            to={`/portfolio?account=${encodeURIComponent(accountId)}`}
+            className="text-sm font-semibold text-brand-600 hover:underline"
+          >
+            {t('Open in Portfolio')}
+          </Link>
+        }
+      />
+      <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
+        {failed ? (
+          <p role="alert" className="py-6 text-center text-sm text-[var(--color-loss)]">
+            {t('Could not load holdings.')}
+          </p>
+        ) : holdings === null ? (
+          <p className="py-6 text-center text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
+        ) : holdings.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[var(--color-muted)]">
+            {t('No holdings in this account yet.')}
+          </p>
+        ) : (
+          holdings.map((h) => <HoldingLine key={h.id} holding={h} />)
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
 /** One account: balance, details and its transactions, newest first. */
 export function AccountDetail() {
   const { id = '' } = useParams()
@@ -65,6 +156,17 @@ function AccountDetailView({ id }: { id: string }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+
+  // Loading holdings refreshes their prices; reload the account so its
+  // holdings value in the balance card matches the list below.
+  const reloadAccount = useCallback(() => {
+    listAccounts()
+      .then((rows) => {
+        const a = rows.find((x) => x.id === id)
+        if (a) setAccount(a)
+      })
+      .catch(() => {})
+  }, [id])
 
   useEffect(() => {
     let live = true
@@ -156,6 +258,7 @@ function AccountDetailView({ id }: { id: string }) {
   }
 
   const isDebt = account.type === 'debt'
+  const isInvestment = account.type === 'investment'
   const typeLabel = ACCOUNT_TYPES.find((t) => t.value === account.type)?.label ?? account.type
   const details: [string, string][] = [
     [t('Type'), typeLabel],
@@ -221,6 +324,22 @@ function AccountDetailView({ id }: { id: string }) {
         >
           {formatMoney(account.currentBalance, account.currency)}
         </p>
+        {isInvestment && account.cashBalance !== undefined && (
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm">
+            <div>
+              <dt className="text-xs text-[var(--color-muted)]">{t('Cash')}</dt>
+              <dd className="tnum font-medium text-[var(--color-ink)]">
+                {formatMoney(account.cashBalance, account.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-muted)]">{t('Holdings')}</dt>
+              <dd className="tnum font-medium text-[var(--color-ink)]">
+                {formatMoney(account.holdingsValue ?? 0, account.currency)}
+              </dd>
+            </div>
+          </dl>
+        )}
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {details.map(([k, v]) => (
             <div key={k}>
@@ -230,6 +349,8 @@ function AccountDetailView({ id }: { id: string }) {
           ))}
         </dl>
       </section>
+
+      {isInvestment && <AccountHoldings accountId={account.id} onLoaded={reloadAccount} />}
 
       <Card>
         <CardHeader title={t('Transactions')} />

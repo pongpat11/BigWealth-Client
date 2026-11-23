@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PieChart as PieIcon, Plus, TriangleAlert } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/Button'
@@ -9,6 +10,7 @@ import { DeleteButton } from '@/components/ui/DeleteButton'
 import { Sheet } from '@/components/ui/Sheet'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
+import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
 import { getLanguage, t } from '@/lib/i18n'
 import {
@@ -21,6 +23,7 @@ import {
   deleteHolding,
   getPortfolio,
   listDividends,
+  NO_ACCOUNT,
   sortHoldings,
   updateHolding,
   type HoldingSort,
@@ -98,17 +101,101 @@ function Message({ children }: { children: string }) {
   )
 }
 
+/** "Settrade · KS Securities": how an account reads in selects and chips. */
+function accountLabel(a: Account): string {
+  return a.institution ? `${a.name} · ${a.institution}` : a.name
+}
+
+/**
+ * The account a holding or dividend goes into before the user picks one.
+ * `onlyAccount` falls back to the single account when there is no preference.
+ */
+function startingAccount(
+  accounts: Account[] | null,
+  preferred?: string | null,
+  onlyAccount = true,
+): string {
+  if (!accounts) return ''
+  if (preferred && accounts.some((a) => a.id === preferred)) return preferred
+  return onlyAccount && accounts.length === 1 ? accounts[0].id : ''
+}
+
+/** Required investment-account select, or a link to create one when there is none. */
+function AccountField({
+  id,
+  accounts,
+  failed,
+  value,
+  onChange,
+}: {
+  id: string
+  /** null while loading or when loading failed. */
+  accounts: Account[] | null
+  failed: boolean
+  value: string
+  onChange: (id: string) => void
+}) {
+  if (accounts === null) {
+    return (
+      <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
+        {failed ? t('Could not load accounts.') : t('Loading…')}
+      </p>
+    )
+  }
+  if (accounts.length === 0) {
+    return (
+      <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
+        {t('Holdings belong to an investment account.')}{' '}
+        <Link to="/accounts" className="font-semibold text-brand-600 hover:underline">
+          {t('Create an investment account first')}
+        </Link>
+      </p>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className={labelClass}>
+        {t('Account')}
+      </label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
+        {value === '' && <option value="">{t('Choose an account')}</option>}
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {accountLabel(a)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
 function HoldingForm({
   initial,
+  accounts,
+  accountsFailed,
+  defaultAccountId,
   onDone,
   onDelete,
   onClose,
 }: {
   initial?: Holding
+  /** The user's investment accounts; null while loading or after a failed load. */
+  accounts: Account[] | null
+  accountsFailed: boolean
+  /** Account picked in the page filter, used for new holdings. */
+  defaultAccountId?: string
   onDone: () => void
   onDelete: () => void
   onClose: () => void
 }) {
+  // Derived until the user picks, so it follows accounts that load later.
+  // An existing holding without an account is never assigned silently.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
+  const accountId =
+    pickedAccount ??
+    (initial
+      ? startingAccount(accounts, initial.accountId, false)
+      : startingAccount(accounts, defaultAccountId))
   const [symbol, setSymbol] = useState(initial?.symbol ?? '')
   const [name, setName] = useState(initial?.name ?? '')
   const [assetClass, setAssetClass] = useState<AssetClass>(initial?.assetClass ?? 'set')
@@ -128,6 +215,10 @@ function HoldingForm({
     const qty = Number(quantity)
     const cost = Number(avgCost)
     const current = Number(price)
+    // Edits still save when accounts can't be loaded; the account is then left as it is.
+    if (!accountId && !(initial && accounts === null)) {
+      return setError(t('Choose the account that holds it.'))
+    }
     if (!symbol.trim()) return setError(t('Enter a symbol.'))
     if (!Number.isFinite(qty) || qty <= 0) return setError(t('Enter a quantity greater than 0.'))
     if (avgCost.trim() === '' || !Number.isFinite(cost) || cost < 0) {
@@ -148,6 +239,7 @@ function HoldingForm({
       avgCost: cost,
       ...(priceGiven && { price: current }),
       autoPrice: followsMarket,
+      ...(accountId && { accountId }),
     }
     try {
       if (initial) await updateHolding(initial.id, input)
@@ -167,6 +259,13 @@ function HoldingForm({
             {initial ? t('Edit {name}', { name: initial.symbol }) : t('New holding')}
           </p>
           {error && <Message>{error}</Message>}
+          <AccountField
+            id="holding-account"
+            accounts={accounts}
+            failed={accountsFailed}
+            value={accountId}
+            onChange={setPickedAccount}
+          />
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="holding-symbol"
@@ -302,7 +401,19 @@ function priceAge(iso: string): string {
   return t('as of {date}', { date: formatDate(iso) })
 }
 
-function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding) => void }) {
+function HoldingRow({
+  holding,
+  account,
+  onEdit,
+}: {
+  holding: Holding
+  /**
+   * Account name to show; null flags a holding with no account; undefined or
+   * '' (name not loaded) shows nothing.
+   */
+  account?: string | null
+  onEdit: (h: Holding) => void
+}) {
   return (
     <button
       type="button"
@@ -321,6 +432,17 @@ function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding
           {quantityText(holding.quantity)} · {native(holding.price, holding.currency)}
           {holding.autoPrice && ` · ${priceAge(holding.priceUpdatedAt)}`}
         </p>
+        {account ? (
+          <span className="mt-1 inline-block max-w-full truncate rounded-full bg-[var(--color-canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-muted)]">
+            {account}
+          </span>
+        ) : (
+          account === null && (
+            <span className="mt-1 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600">
+              {t('No account')}
+            </span>
+          )
+        )}
       </div>
       <div className="shrink-0 text-right">
         <p className="tnum text-sm font-semibold text-[var(--color-ink)]">
@@ -338,11 +460,14 @@ function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding
 
 function HoldingsTab({
   portfolio,
+  accountNames,
   sortBy,
   onSortChange,
   onEdit,
 }: {
   portfolio: PortfolioData
+  /** Account id -> name for row chips; undefined hides them. */
+  accountNames?: Map<string, string>
   sortBy: HoldingSort
   onSortChange: (s: HoldingSort) => void
   onEdit: (h: Holding) => void
@@ -451,7 +576,12 @@ function HoldingsTab({
             <Card>
               <CardBody className="divide-y divide-[var(--color-line)] py-0">
                 {rows.map((h) => (
-                  <HoldingRow key={h.id} holding={h} onEdit={onEdit} />
+                  <HoldingRow
+                    key={h.id}
+                    holding={h}
+                    account={accountNames && (h.accountId ? (accountNames.get(h.accountId) ?? '') : null)}
+                    onEdit={onEdit}
+                  />
                 ))}
               </CardBody>
             </Card>
@@ -462,8 +592,33 @@ function HoldingsTab({
   )
 }
 
-function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
+function DividendForm({
+  accounts,
+  accountsFailed,
+  holdings,
+  defaultAccountId,
+  onDone,
+  onClose,
+}: {
+  accounts: Account[] | null
+  accountsFailed: boolean
+  /** Used to prefill the account from a holding with the same symbol. */
+  holdings: Holding[]
+  defaultAccountId?: string
+  onDone: () => void
+  onClose: () => void
+}) {
   const [symbol, setSymbol] = useState('')
+  // Until the user picks one, the account follows the symbol (the account of a
+  // holding with that symbol), else the page filter or the only account.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
+  const heldIn = holdings.find(
+    (h) =>
+      h.symbol === symbol.trim().toUpperCase() &&
+      h.accountId &&
+      accounts?.some((a) => a.id === h.accountId),
+  )?.accountId
+  const accountId = pickedAccount ?? heldIn ?? startingAccount(accounts, defaultAccountId)
   const [payDate, setPayDate] = useState(() => new Date().toLocaleDateString('en-CA'))
   const [currency, setCurrency] = useState<Currency>('THB')
   const [gross, setGross] = useState('')
@@ -475,6 +630,7 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
     e.preventDefault()
     const grossValue = Number(gross)
     const taxValue = tax.trim() === '' ? 0 : Number(tax)
+    if (!accountId) return setError(t('Choose the account it was paid into.'))
     if (!symbol.trim()) return setError(t('Enter a symbol.'))
     if (!payDate) return setError(t('Pick the pay date.'))
     if (!Number.isFinite(grossValue) || grossValue <= 0) {
@@ -492,6 +648,7 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
         currency,
         gross: grossValue,
         withholdingTax: taxValue,
+        accountId,
       })
       onDone()
     } catch (err) {
@@ -506,6 +663,13 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">{t('New dividend')}</p>
           {error && <Message>{error}</Message>}
+          <AccountField
+            id="dividend-account"
+            accounts={accounts}
+            failed={accountsFailed}
+            value={accountId}
+            onChange={setPickedAccount}
+          />
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="dividend-symbol"
@@ -602,7 +766,15 @@ function DividendRow({ dividend, onDelete }: { dividend: Dividend; onDelete: () 
   )
 }
 
-function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: () => void }) {
+function DividendsTab({
+  accountId,
+  reloadKey,
+  onChanged,
+}: {
+  accountId?: string
+  reloadKey: number
+  onChanged: () => void
+}) {
   const thisYear = new Date().getFullYear()
   const [allYears, setAllYears] = useState(false)
   const [data, setData] = useState<DividendList | null>(null)
@@ -610,7 +782,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
 
   useEffect(() => {
     let active = true
-    listDividends(allYears ? undefined : thisYear)
+    listDividends(allYears ? undefined : thisYear, accountId)
       .then((list) => {
         if (!active) return
         setData(list)
@@ -623,7 +795,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
     return () => {
       active = false
     }
-  }, [allYears, thisYear, reloadKey])
+  }, [allYears, thisYear, accountId, reloadKey])
 
   const undoable = useUndoableDelete()
 
@@ -764,13 +936,38 @@ export function Portfolio() {
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<'closed' | 'new' | Holding>('closed')
   const [reloadKey, setReloadKey] = useState(0)
+  // `?account=<id>` (or `none`) narrows the page to one account.
+  const [params, setParams] = useSearchParams()
+  const accountFilter = params.get('account') ?? ''
+  // Investment accounts; null until loaded (or when loading failed).
+  const [accounts, setAccounts] = useState<Account[] | null>(null)
+  const [accountsFailed, setAccountsFailed] = useState(false)
+  // Whether some holdings have no account yet.
+  const [hasUnassigned, setHasUnassigned] = useState(false)
 
   useEffect(() => {
     let active = true
-    getPortfolio()
+    listAccounts()
+      .then((rows) => {
+        if (!active) return
+        setAccounts(rows.filter((a) => a.type === 'investment'))
+        setAccountsFailed(false)
+      })
+      .catch(() => active && setAccountsFailed(true))
+    return () => {
+      active = false
+    }
+  }, [reloadKey])
+
+  useEffect(() => {
+    let active = true
+    getPortfolio(accountFilter || undefined)
       .then((data) => {
         if (!active) return
         setPortfolio(data)
+        if (!accountFilter || accountFilter === NO_ACCOUNT) {
+          setHasUnassigned(data.holdings.some((h) => !h.accountId))
+        }
         setError(null)
       })
       .catch(
@@ -781,7 +978,43 @@ export function Portfolio() {
     return () => {
       active = false
     }
-  }, [reloadKey])
+  }, [reloadKey, accountFilter])
+
+  // Filtered to one account, the main load can't tell whether others have no
+  // account, so ask for the unassigned ones on their own.
+  useEffect(() => {
+    if (!accountFilter || accountFilter === NO_ACCOUNT) return
+    let active = true
+    getPortfolio(NO_ACCOUNT)
+      .then((data) => active && setHasUnassigned(data.holdings.length > 0))
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [reloadKey, accountFilter])
+
+  const accountNames = useMemo(
+    () => new Map((accounts ?? []).map((a) => [a.id, accountLabel(a)])),
+    [accounts],
+  )
+  const filteredAccount = accountFilter && accountFilter !== NO_ACCOUNT ? accountFilter : undefined
+  // A filter for an account that no longer exists (e.g. an old bookmark).
+  const unknownFilter =
+    filteredAccount !== undefined && accounts !== null && !accounts.some((a) => a.id === filteredAccount)
+
+  function changeFilter(next: string) {
+    setForm('closed')
+    setPortfolio(null)
+    setParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        if (next) p.set('account', next)
+        else p.delete('account')
+        return p
+      },
+      { replace: true },
+    )
+  }
 
   // Totals are computed by the server, so refetch after any change.
   function handleChanged() {
@@ -821,6 +1054,48 @@ export function Portfolio() {
           </Button>
         }
       />
+
+      {accountsFailed && accounts === null && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]"
+        >
+          {t('Could not load accounts.')}
+          <Button size="sm" variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+            {t('Try again')}
+          </Button>
+        </div>
+      )}
+
+      {((accounts?.length ?? 0) > 0 || hasUnassigned || accountFilter) && (
+        <div>
+          <label htmlFor="portfolio-account" className="sr-only">
+            {t('Filter by account')}
+          </label>
+          <select
+            id="portfolio-account"
+            value={accountFilter}
+            onChange={(e) => changeFilter(e.target.value)}
+            className={selectClass}
+          >
+            <option value="">{t('All accounts')}</option>
+            {/* Keeps the select honest while accounts load or for a deleted account. */}
+            {filteredAccount !== undefined && (accounts === null || unknownFilter) && (
+              <option value={filteredAccount}>
+                {unknownFilter ? t('Deleted account') : t('Loading…')}
+              </option>
+            )}
+            {(accounts ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {accountLabel(a)}
+              </option>
+            ))}
+            {(hasUnassigned || accountFilter === NO_ACCOUNT) && (
+              <option value={NO_ACCOUNT}>{t('No account')}</option>
+            )}
+          </select>
+        </div>
+      )}
 
       {error && <Message>{error}</Message>}
 
@@ -878,6 +1153,9 @@ export function Portfolio() {
           <HoldingForm
             key={form === 'new' ? 'new' : form.id}
             initial={form === 'new' ? undefined : form}
+            accounts={accounts}
+            accountsFailed={accountsFailed}
+            defaultAccountId={filteredAccount}
             onDone={handleChanged}
             onDelete={() => form !== 'new' && handleDeleteHolding(form)}
             onClose={() => setForm('closed')}
@@ -886,7 +1164,14 @@ export function Portfolio() {
       )}
       {form === 'new' && tab === 'dividends' && (
         <Sheet label={t('New dividend')} onClose={() => setForm('closed')}>
-          <DividendForm onDone={handleChanged} onClose={() => setForm('closed')} />
+          <DividendForm
+            accounts={accounts}
+            accountsFailed={accountsFailed}
+            holdings={portfolio?.holdings ?? []}
+            defaultAccountId={filteredAccount}
+            onDone={handleChanged}
+            onClose={() => setForm('closed')}
+          />
         </Sheet>
       )}
       {undoable.toast}
@@ -896,13 +1181,20 @@ export function Portfolio() {
           <FxNote fx={portfolio.fx} unconverted={portfolio.unconvertedCount} />
           <HoldingsTab
             portfolio={portfolio}
+            accountNames={accountFilter ? undefined : accountNames}
             sortBy={sortBy}
             onSortChange={setSortBy}
             onEdit={(h) => setForm(h)}
           />
         </>
       )}
-      {tab === 'dividends' && <DividendsTab reloadKey={reloadKey} onChanged={handleChanged} />}
+      {tab === 'dividends' && (
+        <DividendsTab
+          accountId={accountFilter || undefined}
+          reloadKey={reloadKey}
+          onChanged={handleChanged}
+        />
+      )}
     </div>
   )
 }
