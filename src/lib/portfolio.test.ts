@@ -26,6 +26,18 @@ describe('sortHoldings', () => {
     expect(symbols(sortHoldings(rows, 'value'))).toEqual(['CPALL', 'PTT', 'ADVANC', 'AOT'])
   })
 
+  it('ranks same-currency holdings by their own value when there is no rate', () => {
+    const usd = (symbol: string, value: number): Holding => ({
+      ...h(symbol, null, 1),
+      currency: 'USD',
+      marketValue: value,
+    })
+    expect(symbols(sortHoldings([usd('SMALL', 100), usd('VOO', 6000)], 'value'))).toEqual([
+      'VOO',
+      'SMALL',
+    ])
+  })
+
   it('puts the best return first, unknown last', () => {
     expect(symbols(sortHoldings(rows, 'gain'))).toEqual(['ADVANC', 'PTT', 'CPALL', 'AOT'])
   })

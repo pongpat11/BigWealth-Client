@@ -225,6 +225,17 @@ describe('Portfolio page', () => {
     )
   })
 
+  it('keeps the holdings sort when switching tabs', async () => {
+    const user = userEvent.setup()
+    render(<Portfolio />)
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: 'Gain' }))
+    await user.click(screen.getByRole('tab', { name: /dividends/i }))
+    await user.click(screen.getByRole('tab', { name: /holdings/i }))
+    expect(await screen.findByRole('button', { name: 'Gain' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('lists dividends with gross, tax and net, and totals in baht', async () => {
     const user = userEvent.setup()
     render(<Portfolio />)

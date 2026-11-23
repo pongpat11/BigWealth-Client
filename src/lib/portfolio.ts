@@ -135,15 +135,27 @@ export async function deleteDividend(id: string): Promise<void> {
 
 export type HoldingSort = 'value' | 'gain' | 'symbol'
 
+/** Larger value first. Compares in THB when both have it, otherwise in the
+ * holdings' own currency when they share one (no exchange rate available). */
+function compareValue(a: Holding, b: Holding): number {
+  if (a.marketValueTHB !== null && b.marketValueTHB !== null) {
+    return b.marketValueTHB - a.marketValueTHB
+  }
+  if (a.currency === b.currency) return b.marketValue - a.marketValue
+  // Mixed currencies without a rate can't be compared: known THB values first.
+  return Number(a.marketValueTHB === null) - Number(b.marketValueTHB === null)
+}
+
 /**
- * Holdings in display order: largest THB value first, best return first, or
- * by symbol. Holdings without a THB value or a return go last.
+ * Holdings in display order: largest value first, best return first, or by
+ * symbol. Holdings without a return go last when sorting by gain.
  */
 export function sortHoldings(rows: Holding[], by: HoldingSort): Holding[] {
-  const last = Number.NEGATIVE_INFINITY
   return [...rows].sort((a, b) => {
     if (by === 'symbol') return a.symbol.localeCompare(b.symbol)
-    const key = (h: Holding) => (by === 'value' ? (h.marketValueTHB ?? last) : (h.gainPct ?? last))
-    return key(b) - key(a) || a.symbol.localeCompare(b.symbol)
+    if (by === 'value') return compareValue(a, b) || a.symbol.localeCompare(b.symbol)
+    const last = Number.NEGATIVE_INFINITY
+    const diff = (b.gainPct ?? last) - (a.gainPct ?? last)
+    return (Number.isNaN(diff) ? 0 : diff) || a.symbol.localeCompare(b.symbol)
   })
 }

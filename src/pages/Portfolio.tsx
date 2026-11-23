@@ -329,12 +329,15 @@ function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding
 
 function HoldingsTab({
   portfolio,
+  sortBy,
+  onSortChange,
   onEdit,
 }: {
   portfolio: PortfolioData
+  sortBy: HoldingSort
+  onSortChange: (s: HoldingSort) => void
   onEdit: (h: Holding) => void
 }) {
-  const [sortBy, setSortBy] = useState<HoldingSort>('value')
   if (portfolio.holdings.length === 0) {
     return (
       <Card>
@@ -412,7 +415,7 @@ function HoldingsTab({
               key={value}
               type="button"
               aria-pressed={sortBy === value}
-              onClick={() => setSortBy(value)}
+              onClick={() => onSortChange(value)}
               className={
                 'rounded-full px-2.5 py-1 text-xs font-medium transition-colors ' +
                 (sortBy === value
@@ -741,6 +744,8 @@ type Tab = 'holdings' | 'dividends'
 
 export function Portfolio() {
   const [tab, setTab] = useState<Tab>('holdings')
+  // Lives here so the choice survives switching to Dividends and back.
+  const [sortBy, setSortBy] = useState<HoldingSort>('value')
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<'closed' | 'new' | Holding>('closed')
@@ -875,7 +880,12 @@ export function Portfolio() {
       {tab === 'holdings' && portfolio !== null && (
         <>
           <FxNote fx={portfolio.fx} unconverted={portfolio.unconvertedCount} />
-          <HoldingsTab portfolio={portfolio} onEdit={(h) => setForm(h)} />
+          <HoldingsTab
+            portfolio={portfolio}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            onEdit={(h) => setForm(h)}
+          />
         </>
       )}
       {tab === 'dividends' && <DividendsTab reloadKey={reloadKey} onChanged={handleChanged} />}
