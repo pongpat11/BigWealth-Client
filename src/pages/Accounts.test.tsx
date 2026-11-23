@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { Accounts } from './Accounts'
 import * as api from '@/lib/accounts'
 
@@ -47,7 +48,7 @@ describe('Accounts page', () => {
 
   it('groups accounts by type and shows a net-worth total (debt subtracted)', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([savings, wallet, loan])
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
 
     expect(await screen.findByText('SCB Savings')).toBeInTheDocument()
     expect(screen.getByText('Wallet')).toBeInTheDocument()
@@ -65,7 +66,7 @@ describe('Accounts page', () => {
     vi.mocked(api.listAccounts).mockResolvedValue([
       { ...wallet, balance: 2000, currentBalance: 1755 },
     ])
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
     // Shown on the row (and, with one account, the net-worth total) — never the starting 2,000.
     expect((await screen.findAllByText(/฿1,755/)).length).toBeGreaterThan(0)
     expect(screen.queryByText(/฿2,000/)).not.toBeInTheDocument()
@@ -73,7 +74,7 @@ describe('Accounts page', () => {
 
   it('shows an empty state when there are no accounts', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([])
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
     expect(await screen.findByText(/no accounts yet/i)).toBeInTheDocument()
   })
 
@@ -90,7 +91,7 @@ describe('Accounts page', () => {
       createdAt: '2026-07-11T00:00:00.000Z',
     })
     const user = userEvent.setup()
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
     await screen.findByText(/no accounts yet/i)
 
     await user.click(screen.getByRole('button', { name: /^new$/i }))
@@ -115,7 +116,7 @@ describe('Accounts page', () => {
     vi.mocked(api.listAccounts).mockResolvedValue([wallet])
     vi.mocked(api.deleteAccount).mockResolvedValue(undefined)
     const user = userEvent.setup()
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
 
     await screen.findByText('Wallet')
     await user.click(screen.getByRole('button', { name: 'Delete Wallet' }))
@@ -130,13 +131,33 @@ describe('Accounts page', () => {
   it('brings an account back with Undo and never calls the API', async () => {
     vi.mocked(api.listAccounts).mockResolvedValue([wallet])
     const user = userEvent.setup()
-    render(<Accounts />)
+    render(<Accounts />, { wrapper: MemoryRouter })
 
     await screen.findByText('Wallet')
     await user.click(screen.getByRole('button', { name: 'Delete Wallet' }))
     await user.click(screen.getByRole('button', { name: /undo/i }))
 
     expect(screen.getByText('Wallet')).toBeInTheDocument()
+    expect(api.deleteAccount).not.toHaveBeenCalled()
+  })
+
+  it('runs a delete handed over from the detail screen with an Undo window', async () => {
+    vi.mocked(api.listAccounts).mockResolvedValue([savings, wallet])
+    vi.mocked(api.deleteAccount).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/accounts', state: { deleteAccountId: 'a2' } }]}>
+        <Routes>
+          <Route path="/accounts" element={<Accounts />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('SCB Savings')).toBeInTheDocument()
+    expect(screen.queryByText('Wallet')).toBeNull()
+    expect(api.deleteAccount).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+    expect(await screen.findByText('Wallet')).toBeInTheDocument()
     expect(api.deleteAccount).not.toHaveBeenCalled()
   })
 })

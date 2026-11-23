@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { AppShell } from '@/components/layout/AppShell'
+import { AccountDetail } from '@/pages/AccountDetail'
 import { Accounts } from '@/pages/Accounts'
 import { Budgets } from '@/pages/Budgets'
 import { Categories } from '@/pages/Categories'
@@ -37,6 +38,7 @@ function App() {
           <Route path="/debts" element={<Debts />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/accounts" element={<Accounts />} />
+          <Route path="/accounts/:id" element={<AccountDetail />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>
