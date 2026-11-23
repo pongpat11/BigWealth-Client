@@ -226,6 +226,102 @@ describe('Portfolio page', () => {
         expect.objectContaining({ assetClass: 'gold', currency: 'THB', quantity: 2, autoPrice: true }),
       ),
     )
+    // Baht-weight is what the server assumes for gold in baht, so it isn't sent.
+    expect(vi.mocked(api.createHolding).mock.calls[0][0]).not.toHaveProperty('goldUnit')
+  })
+
+  it('adds gold in troy ounces, in dollars by default', async () => {
+    vi.mocked(api.createHolding).mockResolvedValue(ptt)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'xau')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    expect(screen.getByRole('button', { name: /baht-weight/i })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Troy ounce' }))
+    expect(screen.getByRole('button', { name: 'Troy ounce' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Currency')).toHaveValue('USD')
+    expect(screen.getByText(/per troy ounce/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Quantity (troy oz)'), '1.5')
+    await user.type(screen.getByLabelText(/average cost/i), '2950')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    await waitFor(() =>
+      expect(api.createHolding).toHaveBeenCalledWith(
+        expect.objectContaining({ assetClass: 'gold', currency: 'USD', quantity: 1.5 }),
+      ),
+    )
+    // Ounces are the default for gold in dollars; in baht the unit has to be sent.
+    expect(vi.mocked(api.createHolding).mock.calls[0][0]).not.toHaveProperty('goldUnit')
+    await waitFor(() => expect(api.getPortfolio).toHaveBeenCalledTimes(2))
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'xau')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    await user.click(screen.getByRole('button', { name: 'Troy ounce' }))
+    await user.selectOptions(screen.getByLabelText('Currency'), 'THB')
+    await user.type(screen.getByLabelText('Quantity (troy oz)'), '1')
+    await user.type(screen.getByLabelText(/average cost/i), '100000')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    await waitFor(() =>
+      expect(api.createHolding).toHaveBeenLastCalledWith(
+        expect.objectContaining({ assetClass: 'gold', goldUnit: 'oz', currency: 'THB' }),
+      ),
+    )
+  })
+
+  it('converts the amounts when an edit switches the gold unit', async () => {
+    const bar: Holding = { ...ptt, id: 'bar', accountId: 'settrade', symbol: 'GOLD', assetClass: 'gold', goldUnit: 'baht', quantity: 2, avgCost: 41000, price: 44000 }
+    vi.mocked(api.getPortfolio).mockResolvedValue({ ...portfolio, holdings: [bar] })
+    vi.mocked(api.updateHolding).mockResolvedValue(bar)
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: 'Edit holding GOLD' }))
+    await user.click(screen.getByRole('button', { name: 'Troy ounce' }))
+    expect(screen.getByRole('status')).toHaveTextContent(/converted to troy ounce/i)
+    const oz = api.GOLD_OZ_PER_BAHT
+    expect(screen.getByLabelText('Quantity (troy oz)')).toHaveValue(String(Math.round(2 * oz * 1e8) / 1e8))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(api.updateHolding).toHaveBeenCalled())
+    const sent = vi.mocked(api.updateHolding).mock.calls[0][1]
+    expect(sent.goldUnit).toBe('oz')
+    expect(sent.avgCost).toBeCloseTo(41000 / oz, 1)
+    expect(sent.price).toBeCloseTo(44000 / oz, 1)
+    // The value is unchanged.
+    expect(sent.quantity! * sent.price!).toBeCloseTo(2 * 44000, -1)
+  })
+
+  it('lists baht-weight and ounce gold apart, each with its total', async () => {
+    const gold = (id: string, goldUnit: Holding['goldUnit'], quantity: number, currency: Holding['currency']): Holding => ({
+      ...ptt,
+      id,
+      symbol: 'GOLD',
+      assetClass: 'gold',
+      goldUnit,
+      currency,
+      quantity,
+    })
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      // Rows saved before units existed (no goldUnit) follow the currency.
+      holdings: [
+        gold('g1', 'baht', 2, 'THB'),
+        gold('g2', undefined, 1, 'THB'),
+        gold('g3', 'oz', 1.5, 'USD'),
+        gold('g4', undefined, 1, 'USD'),
+      ],
+    })
+    renderPage()
+
+    const baht = await screen.findByRole('region', { name: 'Gold · Baht-weight (96.5%)' })
+    expect(within(baht).getByText('3 baht total')).toBeInTheDocument()
+    expect(within(baht).getByText('2 baht · ฿38.25')).toBeInTheDocument()
+    expect(within(baht).getByText('1 baht · ฿38.25')).toBeInTheDocument()
+    const oz = screen.getByRole('region', { name: 'Gold · Troy ounce' })
+    expect(within(oz).getByText('2.5 oz total')).toBeInTheDocument()
+    expect(within(oz).getByText('1.5 oz · $38.25')).toBeInTheDocument()
+    expect(within(oz).getByText('1 oz · $38.25')).toBeInTheDocument()
   })
 
   it('picks dollars for US stocks and crypto', async () => {

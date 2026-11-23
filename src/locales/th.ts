@@ -278,14 +278,24 @@ export const th: Record<string, string> = {
   'e.g. PTT PCL': 'เช่น ปตท.',
   'Asset class': 'ประเภทสินทรัพย์',
   'Quantity (baht-weight)': 'จำนวน (บาททองคำ)',
+  'Quantity (troy oz)': 'จำนวน (ออนซ์)',
+  'Gold unit': 'หน่วยทองคำ',
+  'Baht-weight (96.5%)': 'บาททองคำ (96.5%)',
+  'Troy ounce': 'ออนซ์',
+  baht: 'บาท',
+  '{qty} total': 'รวม {qty}',
+  'Quantity and prices converted to {unit}. Check them before saving.':
+    'แปลงจำนวนและราคาเป็น{unit}แล้ว ตรวจสอบก่อนบันทึก',
   Quantity: 'จำนวน',
   'Average cost / unit': 'ต้นทุนเฉลี่ย / หน่วย',
   'Price / unit (optional)': 'ราคา / หน่วย (ไม่บังคับ)',
   'Current price / unit': 'ราคาปัจจุบัน / หน่วย',
   'Looked up': 'ดึงอัตโนมัติ',
   'Update price automatically': 'อัปเดตราคาอัตโนมัติ',
-  'Estimated per baht-weight of 96.5% gold (in THB) from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.':
-    'ประมาณราคาต่อบาททองคำ 96.5% (เป็นเงินบาท) จากราคาตลาดโลก ราคาร้านทองจะสูงกว่าเล็กน้อย กรอกจำนวนเป็นบาททองคำ ไม่ใช่กรัม',
+  'Estimated per baht-weight of 96.5% gold from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.':
+    'ประมาณราคาต่อบาททองคำ 96.5% จากราคาตลาดโลก ราคาร้านทองจะสูงกว่าเล็กน้อย กรอกจำนวนเป็นบาททองคำ ไม่ใช่กรัม',
+  'World gold price per troy ounce (gold futures, delayed up to 15 min).':
+    'ราคาทองคำตลาดโลกต่อออนซ์ (สัญญาซื้อขายล่วงหน้า ล่าช้าได้ถึง 15 นาที)',
   'From the market each time you open Portfolio (delayed up to 15 min).':
     'ดึงจากตลาดทุกครั้งที่เปิดหน้าพอร์ต (ล่าช้าได้ถึง 15 นาที)',
   "Prices for {assetClass} aren't fetched automatically. Update the current price here when you want a fresh valuation.":

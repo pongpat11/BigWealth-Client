@@ -1,7 +1,7 @@
 import { t } from '@/lib/i18n'
 // Portfolio API client: investment holdings and dividends. Prices are entered
-// by hand, or kept current by the server for SET, US and crypto holdings with
-// autoPrice on. The server converts USD to THB with a daily reference rate.
+// by hand, or kept current by the server for SET, US, crypto and gold holdings
+// with autoPrice on. The server converts USD to THB with a daily reference rate.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
 import type { Currency } from '@/types'
@@ -22,6 +22,35 @@ export const ASSET_CLASS_META: Record<AssetClass, { label: string; color: string
   cash: { label: t('Cash'), color: '#94a3b8' },
 }
 
+/** What one unit of gold is: a Thai baht-weight of 96.5% bar gold, or a troy ounce. */
+export const GOLD_UNITS = ['baht', 'oz'] as const
+export type GoldUnit = (typeof GOLD_UNITS)[number]
+
+export const GOLD_UNIT_META: Record<GoldUnit, { label: string; short: string }> = {
+  baht: { label: t('Baht-weight (96.5%)'), short: t('baht') },
+  oz: { label: t('Troy ounce'), short: 'oz' },
+}
+
+/** Troy ounces of pure gold in one baht-weight of 96.5% bar gold (15.244 g). */
+export const GOLD_OZ_PER_BAHT = (15.244 / 31.1034768) * 0.965
+
+/** The unit the server assumes when none is given: ounces in dollars, baht-weight in baht. */
+export function defaultGoldUnit(currency: Currency): GoldUnit {
+  return currency === 'USD' ? 'oz' : 'baht'
+}
+
+/** The unit a gold holding counts (older rows without one follow the currency); null for other classes. */
+export function goldUnitOf(h: Pick<Holding, 'assetClass' | 'goldUnit' | 'currency'>): GoldUnit | null {
+  return h.assetClass === 'gold' ? (h.goldUnit ?? defaultGoldUnit(h.currency)) : null
+}
+
+/** "5,000" for most holdings; "2 baht" / "1.5 oz" for gold. */
+export function holdingQuantityText(h: Pick<Holding, 'assetClass' | 'goldUnit' | 'currency' | 'quantity'>): string {
+  const text = h.quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })
+  const unit = goldUnitOf(h)
+  return unit ? `${text} ${GOLD_UNIT_META[unit].short}` : text
+}
+
 export interface Fx {
   /** THB per 1 USD, or null when no rate is available. */
   usdThb: number | null
@@ -35,6 +64,8 @@ export interface Holding {
   symbol: string
   name: string | null
   assetClass: AssetClass
+  /** Gold only: what `quantity` counts. */
+  goldUnit?: GoldUnit | null
   currency: Currency
   quantity: number
   /** Per unit, in the holding's currency. */
@@ -55,6 +86,8 @@ export interface HoldingInput {
   symbol: string
   name: string | null
   assetClass: AssetClass
+  /** Sent for gold only. */
+  goldUnit?: GoldUnit
   currency: Currency
   quantity: number
   avgCost: number

@@ -8,7 +8,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDateTime, formatPercent } from '@/lib/format'
-import { getPortfolio, type Holding } from '@/lib/portfolio'
+import { getPortfolio, holdingQuantityText, type Holding } from '@/lib/portfolio'
 import { listTransactionPage, type Transaction } from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
 import { t } from '@/lib/i18n'
@@ -60,7 +60,7 @@ function HoldingLine({ holding }: { holding: Holding }) {
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{holding.symbol}</p>
         <p className="tnum text-xs text-[var(--color-muted)]">
-          {holding.quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+          {holdingQuantityText(holding)}
         </p>
       </div>
       <div className="shrink-0 text-right">

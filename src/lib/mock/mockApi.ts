@@ -9,7 +9,7 @@ import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
 import { nextOccurrenceOnOrAfter, todayKey, type RecurringRule } from '../recurring'
-import type { Dividend, DividendList, Holding, Portfolio } from '../portfolio'
+import { goldUnitOf, type Dividend, type DividendList, type Holding, type Portfolio } from '../portfolio'
 import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -186,7 +186,7 @@ let goals: Goal[] = [
 const MOCK_USD_THB = 34
 type StoredHolding = Pick<
   Holding,
-  'id' | 'accountId' | 'symbol' | 'name' | 'assetClass' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt' | 'autoPrice'
+  'id' | 'accountId' | 'symbol' | 'name' | 'assetClass' | 'goldUnit' | 'currency' | 'quantity' | 'avgCost' | 'price' | 'priceUpdatedAt' | 'autoPrice'
 >
 let holdings: StoredHolding[] = [
   { id: 'h-ptt', accountId: 'settrade', symbol: 'PTT', name: 'PTT PCL', assetClass: 'set', currency: 'THB', quantity: 5000, avgCost: 34.5, price: 38.25, priceUpdatedAt: daysAgo(2), autoPrice: true },
@@ -194,7 +194,8 @@ let holdings: StoredHolding[] = [
   { id: 'h-voo', accountId: 'ibkr', symbol: 'VOO', name: 'Vanguard S&P 500', assetClass: 'us', currency: 'USD', quantity: 12, avgCost: 412, price: 498, priceUpdatedAt: daysAgo(1), autoPrice: true },
   { id: 'h-kfsdiv', accountId: 'settrade', symbol: 'KFSDIV', name: 'Krungsri Dividend', assetClass: 'fund', currency: 'THB', quantity: 8200, avgCost: 18.2, price: 19.05, priceUpdatedAt: daysAgo(5) },
   { id: 'h-btc', accountId: 'binance', symbol: 'BTC', name: 'Bitcoin', assetClass: 'crypto', currency: 'USD', quantity: 0.045, avgCost: 61000, price: 68500, priceUpdatedAt: daysAgo(1), autoPrice: true },
-  { id: 'h-gold', accountId: null, symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
+  { id: 'h-gold', accountId: null, symbol: 'GOLD', name: 'Gold bar 96.5%', assetClass: 'gold', goldUnit: 'baht', currency: 'THB', quantity: 2, avgCost: 41000, price: 44200, priceUpdatedAt: daysAgo(3) },
+  { id: 'h-gold-oz', accountId: 'ibkr', symbol: 'XAU', name: 'Gold spot', assetClass: 'gold', goldUnit: 'oz', currency: 'USD', quantity: 1.5, avgCost: 2950, price: 3480, priceUpdatedAt: daysAgo(1), autoPrice: true },
 ]
 type StoredDividend = Omit<Dividend, 'net' | 'netTHB'>
 let dividendRows: StoredDividend[] = [
@@ -208,6 +209,7 @@ function valued(h: StoredHolding): Holding {
   const costBasis = h.quantity * h.avgCost
   return {
     ...h,
+    goldUnit: goldUnitOf(h),
     marketValue,
     costBasis,
     marketValueTHB: marketValue * thbFactor(h.currency),
@@ -457,7 +459,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     if (!existing) notFound('Holding')
     if (method === 'PATCH') {
       assertInvestmentAccount(body?.accountId)
-      const updated = { ...existing, ...(body as Partial<StoredHolding>), priceUpdatedAt: now() }
+      const patch = body as Partial<StoredHolding>
+      // Like the server: a gold edit without a unit keeps the one it counts now.
+      const updated = { ...existing, goldUnit: goldUnitOf(existing), ...patch, priceUpdatedAt: now() }
       holdings = holdings.map((x) => (x.id === param ? updated : x))
       return valued(updated) as T
     }
