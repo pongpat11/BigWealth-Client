@@ -14,8 +14,12 @@ export interface Account {
   currency: Currency
   /** Starting balance entered at setup. */
   balance: number
-  /** Starting balance ± this account's transactions (what to display). */
+  /** What the account is worth (what to display): cash + holdings. */
   currentBalance: number
+  /** Starting balance ± this account's transactions. Absent from older servers. */
+  cashBalance?: number
+  /** Market value of the holdings in this account, in its currency. */
+  holdingsValue?: number
   /** Loan details for debt accounts. Absent/null when not set. */
   interestRate?: number | null // annual %
   minPayment?: number | null // per month

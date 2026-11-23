@@ -457,4 +457,21 @@ export const th: Record<string, string> = {
   'No transactions match these filters.': 'ไม่มีรายการที่ตรงกับตัวกรอง',
   'No transactions yet. Add your first one.': 'ยังไม่มีรายการ เพิ่มรายการแรกของคุณ',
   'Clear filters': 'ล้างตัวกรอง',
+
+  // Portfolio ↔ accounts
+  Account: 'บัญชี',
+  'All accounts': 'ทุกบัญชี',
+  'Filter by account': 'กรองตามบัญชี',
+  'No account': 'ยังไม่ระบุบัญชี',
+  'Choose an account': 'เลือกบัญชี',
+  'Choose the account that holds it.': 'เลือกบัญชีที่ถือสินทรัพย์นี้',
+  'Choose the account it was paid into.': 'เลือกบัญชีที่ได้รับเงินปันผล',
+  'Holdings belong to an investment account.': 'สินทรัพย์ต้องอยู่ในบัญชีลงทุน',
+  'Create an investment account first': 'สร้างบัญชีลงทุนก่อน',
+  'Starting cash balance': 'เงินสดตั้งต้น',
+  'Only the uninvested cash. Holdings linked to this account in Portfolio are added to its value.':
+    'ใส่เฉพาะเงินสดที่ยังไม่ได้ลงทุน มูลค่าสินทรัพย์ที่ผูกกับบัญชีนี้ในหน้าพอร์ตจะถูกรวมให้อัตโนมัติ',
+  'Open in Portfolio': 'ดูในพอร์ต',
+  'Could not load holdings.': 'โหลดสินทรัพย์ไม่สำเร็จ',
+  'No holdings in this account yet.': 'ยังไม่มีสินทรัพย์ในบัญชีนี้',
 }

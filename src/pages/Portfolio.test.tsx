@@ -1,8 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { Portfolio } from './Portfolio'
 import * as api from '@/lib/portfolio'
+import * as accountsApi from '@/lib/accounts'
+import type { Account } from '@/lib/accounts'
 import type { DividendList, Holding, Portfolio as PortfolioData } from '@/lib/portfolio'
 
 vi.mock('@/lib/portfolio', async (importOriginal) => ({
@@ -16,6 +19,29 @@ vi.mock('@/lib/portfolio', async (importOriginal) => ({
   createDividend: vi.fn(),
   deleteDividend: vi.fn(),
 }))
+vi.mock('@/lib/accounts', () => ({ listAccounts: vi.fn() }))
+
+const account = (id: string, name: string, type: Account['type'] = 'investment'): Account => ({
+  id,
+  name,
+  institution: null,
+  type,
+  currency: 'THB',
+  balance: 0,
+  currentBalance: 0,
+  createdAt: '2026-01-01T00:00:00.000Z',
+})
+const settrade = account('settrade', 'Settrade')
+const ibkr = account('ibkr', 'IBKR')
+const bank = account('bank', 'KBank', 'bank')
+
+function renderPage(path = '/portfolio') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Portfolio />
+    </MemoryRouter>,
+  )
+}
 
 const ptt: Holding = {
   id: 'ptt',
@@ -80,10 +106,12 @@ describe('Portfolio page', () => {
     vi.clearAllMocks()
     vi.mocked(api.getPortfolio).mockResolvedValue(portfolio)
     vi.mocked(api.listDividends).mockResolvedValue(dividends)
+    // One investment account: new holdings default to it. Bank accounts never show.
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([settrade, bank])
   })
 
   it('shows the total, gain vs cost, and holdings grouped by asset class', async () => {
-    render(<Portfolio />)
+    renderPage()
 
     expect(await screen.findByText('฿395,250')).toBeInTheDocument()
     expect(screen.getByText('▲ +฿10,590 (+2.8%)')).toBeInTheDocument()
@@ -107,7 +135,7 @@ describe('Portfolio page', () => {
       unconvertedCount: 1,
       holdings: [ptt, { ...voo, marketValueTHB: null, costBasisTHB: null }],
     })
-    render(<Portfolio />)
+    renderPage()
 
     expect(await screen.findByRole('status')).toHaveTextContent(/1 USD item is left out/i)
     // Falls back to the dollar value rather than showing a made-up baht figure.
@@ -123,14 +151,14 @@ describe('Portfolio page', () => {
       totalGainTHB: 0,
       totalGainPct: null,
     })
-    render(<Portfolio />)
+    renderPage()
     expect(await screen.findByText(/no holdings yet/i)).toBeInTheDocument()
   })
 
   it('adds a stock that follows the market without entering a price', async () => {
     vi.mocked(api.createHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -149,6 +177,7 @@ describe('Portfolio page', () => {
         quantity: 4000,
         avgCost: 62,
         autoPrice: true,
+        accountId: 'settrade',
       }),
     )
     await waitFor(() => expect(api.getPortfolio).toHaveBeenCalledTimes(2))
@@ -157,7 +186,7 @@ describe('Portfolio page', () => {
   it('requires a price when automatic prices are off or unavailable', async () => {
     vi.mocked(api.createHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -181,7 +210,7 @@ describe('Portfolio page', () => {
   it('offers an estimated gold price per baht-weight', async () => {
     vi.mocked(api.createHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -201,7 +230,7 @@ describe('Portfolio page', () => {
 
   it('picks dollars for US stocks and crypto', async () => {
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: /^add$/i }))
@@ -212,7 +241,7 @@ describe('Portfolio page', () => {
   it('updates a price from the edit form', async () => {
     vi.mocked(api.updateHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
 
     await user.click(await screen.findByRole('button', { name: /edit holding ptt/i }))
     const price = screen.getByLabelText(/current price/i)
@@ -227,7 +256,7 @@ describe('Portfolio page', () => {
 
   it('keeps the holdings sort when switching tabs', async () => {
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('button', { name: 'Gain' }))
@@ -238,7 +267,7 @@ describe('Portfolio page', () => {
 
   it('lists dividends with gross, tax and net, and totals in baht', async () => {
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
 
     await user.click(screen.getByRole('tab', { name: /dividends/i }))
@@ -249,15 +278,15 @@ describe('Portfolio page', () => {
     expect(within(row).getByText('$20.00')).toBeInTheDocument()
     expect(within(row).getByText('−$3.00')).toBeInTheDocument()
     expect(within(row).getByText('$17.00')).toBeInTheDocument()
-    expect(api.listDividends).toHaveBeenCalledWith(new Date().getFullYear())
+    expect(api.listDividends).toHaveBeenCalledWith(new Date().getFullYear(), undefined)
 
     await user.click(screen.getByRole('button', { name: /all years/i }))
-    await waitFor(() => expect(api.listDividends).toHaveBeenLastCalledWith(undefined))
+    await waitFor(() => expect(api.listDividends).toHaveBeenLastCalledWith(undefined, undefined))
   })
 
   it('refuses withholding tax larger than the dividend', async () => {
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
     await user.click(screen.getByRole('tab', { name: /dividends/i }))
     await screen.findByText('฿2,738')
@@ -272,10 +301,116 @@ describe('Portfolio page', () => {
     expect(api.createDividend).not.toHaveBeenCalled()
   })
 
+  describe('accounts', () => {
+    const linked = {
+      ...portfolio,
+      holdings: [{ ...ptt, accountId: 'settrade' }, { ...voo, accountId: null }],
+    }
+
+    it('labels each holding with its account and flags unassigned ones', async () => {
+      vi.mocked(api.getPortfolio).mockResolvedValue(linked)
+      renderPage()
+
+      const thai = await screen.findByRole('region', { name: 'Thai Stocks' })
+      expect(within(thai).getByText('Settrade')).toBeInTheDocument()
+      const us = screen.getByRole('region', { name: 'US Stocks' })
+      expect(within(us).getByText('No account')).toBeInTheDocument()
+
+      const filter = screen.getByLabelText('Filter by account')
+      const options = within(filter).getAllByRole('option').map((o) => o.textContent)
+      expect(options).toEqual(['All accounts', 'Settrade', 'No account'])
+    })
+
+    it('narrows the page to the account in ?account=', async () => {
+      const user = userEvent.setup()
+      renderPage('/portfolio?account=settrade')
+      await screen.findByText('฿395,250')
+      expect(api.getPortfolio).toHaveBeenCalledWith('settrade')
+      // Every row is in that account, so the chips are left out.
+      expect(screen.queryByText('Settrade', { selector: 'span' })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('tab', { name: /dividends/i }))
+      await waitFor(() =>
+        expect(api.listDividends).toHaveBeenCalledWith(new Date().getFullYear(), 'settrade'),
+      )
+
+      await user.selectOptions(screen.getByLabelText('Filter by account'), '')
+      await waitFor(() => expect(api.getPortfolio).toHaveBeenLastCalledWith(undefined))
+    })
+
+    it('requires an account for a new holding when there are several', async () => {
+      vi.mocked(accountsApi.listAccounts).mockResolvedValue([settrade, ibkr])
+      vi.mocked(api.createHolding).mockResolvedValue(ptt)
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('฿395,250')
+
+      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.type(screen.getByLabelText('Symbol'), 'voo')
+      await user.type(screen.getByLabelText('Quantity'), '1')
+      await user.type(screen.getByLabelText(/average cost/i), '500')
+      await user.click(screen.getByRole('button', { name: /add holding/i }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(/choose the account that holds it/i)
+      expect(api.createHolding).not.toHaveBeenCalled()
+
+      await user.selectOptions(screen.getByLabelText('Account'), 'ibkr')
+      await user.click(screen.getByRole('button', { name: /add holding/i }))
+      await waitFor(() =>
+        expect(api.createHolding).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'ibkr' })),
+      )
+    })
+
+    it('starts a new holding in the filtered account', async () => {
+      vi.mocked(accountsApi.listAccounts).mockResolvedValue([settrade, ibkr])
+      const user = userEvent.setup()
+      renderPage('/portfolio?account=ibkr')
+      await screen.findByText('฿395,250')
+
+      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      expect(screen.getByLabelText('Account')).toHaveValue('ibkr')
+    })
+
+    it('links to creating an investment account when there is none', async () => {
+      vi.mocked(accountsApi.listAccounts).mockResolvedValue([bank])
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('฿395,250')
+
+      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      expect(screen.getByRole('link', { name: /create an investment account first/i })).toHaveAttribute(
+        'href',
+        '/accounts',
+      )
+    })
+
+    it('fills a dividend\'s account from the holding with that symbol', async () => {
+      vi.mocked(accountsApi.listAccounts).mockResolvedValue([settrade, ibkr])
+      vi.mocked(api.getPortfolio).mockResolvedValue({
+        ...portfolio,
+        holdings: [{ ...ptt, accountId: 'settrade' }, { ...voo, accountId: 'ibkr' }],
+      })
+      vi.mocked(api.createDividend).mockResolvedValue(dividends.items[1])
+      const user = userEvent.setup()
+      renderPage()
+      await screen.findByText('฿395,250')
+      await user.click(screen.getByRole('tab', { name: /dividends/i }))
+      await screen.findByText('฿2,738')
+
+      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.type(screen.getByLabelText('Symbol'), 'voo')
+      expect(screen.getByLabelText('Account')).toHaveValue('ibkr')
+      await user.type(screen.getByLabelText('Gross amount'), '20')
+      await user.click(screen.getByRole('button', { name: /add dividend/i }))
+      await waitFor(() =>
+        expect(api.createDividend).toHaveBeenCalledWith(expect.objectContaining({ symbol: 'VOO', accountId: 'ibkr' })),
+      )
+    })
+  })
+
   it('deletes a dividend in one tap with an undo window', async () => {
     vi.mocked(api.deleteDividend).mockResolvedValue(undefined)
     const user = userEvent.setup()
-    render(<Portfolio />)
+    renderPage()
     await screen.findByText('฿395,250')
     await user.click(screen.getByRole('tab', { name: /dividends/i }))
 

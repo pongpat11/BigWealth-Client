@@ -7,7 +7,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Sheet } from '@/components/ui/Sheet'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatPercent } from '@/lib/format'
+import { getPortfolio, type Holding } from '@/lib/portfolio'
 import { listTransactionPage, type Transaction } from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
 import { t } from '@/lib/i18n'
@@ -48,6 +49,85 @@ function TxRow({ tx }: { tx: Transaction }) {
         {formatMoney(tx.amount, tx.currency === 'USD' ? 'USD' : 'THB')}
       </span>
     </div>
+  )
+}
+
+/** A holding in this account: symbol, quantity, value in its currency, return. */
+function HoldingLine({ holding }: { holding: Holding }) {
+  const gain = holding.gainPct
+  return (
+    <div className="flex items-center justify-between gap-3 py-3">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{holding.symbol}</p>
+        <p className="tnum text-xs text-[var(--color-muted)]">
+          {holding.quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="tnum text-sm font-semibold text-[var(--color-ink)]">
+          {formatMoney(holding.marketValue, holding.currency === 'USD' ? 'USD' : 'THB')}
+        </p>
+        <p
+          className={
+            'tnum text-xs font-medium ' +
+            (gain === null || gain === 0
+              ? 'text-[var(--color-muted)]'
+              : gain > 0
+                ? 'text-[var(--color-gain)]'
+                : 'text-[var(--color-loss)]')
+          }
+        >
+          {gain === null ? '—' : `${gain > 0 ? '▲' : gain < 0 ? '▼' : ''} ${formatPercent(gain)}`.trim()}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/** Holdings linked to an investment account, loaded on their own so a slow price feed never holds up the page. */
+function AccountHoldings({ accountId }: { accountId: string }) {
+  const [holdings, setHoldings] = useState<Holding[] | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    getPortfolio(accountId)
+      .then((p) => live && setHoldings(p.holdings))
+      .catch(() => live && setFailed(true))
+    return () => {
+      live = false
+    }
+  }, [accountId])
+
+  return (
+    <Card>
+      <CardHeader
+        title={t('Holdings')}
+        action={
+          <Link
+            to={`/portfolio?account=${encodeURIComponent(accountId)}`}
+            className="text-sm font-semibold text-brand-600 hover:underline"
+          >
+            {t('Open in Portfolio')}
+          </Link>
+        }
+      />
+      <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
+        {failed ? (
+          <p role="alert" className="py-6 text-center text-sm text-[var(--color-loss)]">
+            {t('Could not load holdings.')}
+          </p>
+        ) : holdings === null ? (
+          <p className="py-6 text-center text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
+        ) : holdings.length === 0 ? (
+          <p className="py-6 text-center text-sm text-[var(--color-muted)]">
+            {t('No holdings in this account yet.')}
+          </p>
+        ) : (
+          holdings.map((h) => <HoldingLine key={h.id} holding={h} />)
+        )}
+      </CardBody>
+    </Card>
   )
 }
 
@@ -156,6 +236,7 @@ function AccountDetailView({ id }: { id: string }) {
   }
 
   const isDebt = account.type === 'debt'
+  const isInvestment = account.type === 'investment'
   const typeLabel = ACCOUNT_TYPES.find((t) => t.value === account.type)?.label ?? account.type
   const details: [string, string][] = [
     [t('Type'), typeLabel],
@@ -221,6 +302,22 @@ function AccountDetailView({ id }: { id: string }) {
         >
           {formatMoney(account.currentBalance, account.currency)}
         </p>
+        {isInvestment && account.cashBalance !== undefined && (
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm">
+            <div>
+              <dt className="text-xs text-[var(--color-muted)]">{t('Cash')}</dt>
+              <dd className="tnum font-medium text-[var(--color-ink)]">
+                {formatMoney(account.cashBalance, account.currency)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-[var(--color-muted)]">{t('Holdings')}</dt>
+              <dd className="tnum font-medium text-[var(--color-ink)]">
+                {formatMoney(account.holdingsValue ?? 0, account.currency)}
+              </dd>
+            </div>
+          </dl>
+        )}
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {details.map(([k, v]) => (
             <div key={k}>
@@ -230,6 +327,8 @@ function AccountDetailView({ id }: { id: string }) {
           ))}
         </dl>
       </section>
+
+      {isInvestment && <AccountHoldings accountId={account.id} />}
 
       <Card>
         <CardHeader title={t('Transactions')} />

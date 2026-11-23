@@ -5,6 +5,8 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom
 import { AccountDetail } from './AccountDetail'
 import * as accountsApi from '@/lib/accounts'
 import * as txApi from '@/lib/transactions'
+import * as portfolioApi from '@/lib/portfolio'
+import type { Portfolio } from '@/lib/portfolio'
 import type { Transaction } from '@/lib/transactions'
 
 vi.mock('@/lib/accounts', () => ({
@@ -14,6 +16,49 @@ vi.mock('@/lib/accounts', () => ({
   deleteAccount: vi.fn(),
 }))
 vi.mock('@/lib/transactions', () => ({ listTransactionPage: vi.fn() }))
+vi.mock('@/lib/portfolio', () => ({ getPortfolio: vi.fn() }))
+
+const broker = {
+  id: 'settrade',
+  name: 'SET Brokerage',
+  institution: 'Settrade',
+  type: 'investment' as const,
+  currency: 'THB' as const,
+  balance: 50000,
+  cashBalance: 48500,
+  holdingsValue: 191250,
+  currentBalance: 239750,
+  createdAt: '2026-07-01T00:00:00.000Z',
+}
+
+const brokerPortfolio: Portfolio = {
+  fx: { usdThb: 34, date: '2026-11-20' },
+  totalValueTHB: 191250,
+  totalCostTHB: 172500,
+  totalGainTHB: 18750,
+  totalGainPct: 10.87,
+  unconvertedCount: 0,
+  allocation: [{ assetClass: 'set', valueTHB: 191250, pct: 100 }],
+  holdings: [
+    {
+      id: 'ptt',
+      accountId: 'settrade',
+      symbol: 'PTT',
+      name: null,
+      assetClass: 'set',
+      currency: 'THB',
+      quantity: 5000,
+      avgCost: 34.5,
+      price: 38.25,
+      priceUpdatedAt: '2026-11-20T00:00:00.000Z',
+      marketValue: 191250,
+      costBasis: 172500,
+      marketValueTHB: 191250,
+      costBasisTHB: 172500,
+      gainPct: 10.87,
+    },
+  ],
+}
 
 const card = {
   id: 'card',
@@ -64,6 +109,32 @@ function renderAt(path: string) {
 
 describe('AccountDetail', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('splits an investment account into cash and holdings and lists them', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([broker])
+    vi.mocked(txApi.listTransactionPage).mockResolvedValue({ items: [], nextCursor: null })
+    vi.mocked(portfolioApi.getPortfolio).mockResolvedValue(brokerPortfolio)
+    renderAt('/accounts/settrade')
+
+    expect(await screen.findByText('฿239,750')).toBeInTheDocument()
+    expect(screen.getByText('฿48,500')).toBeInTheDocument()
+    expect(await screen.findByText('PTT')).toBeInTheDocument()
+    expect(screen.getByText('▲ +10.9%')).toBeInTheDocument()
+    expect(portfolioApi.getPortfolio).toHaveBeenCalledWith('settrade')
+    expect(screen.getByRole('link', { name: /open in portfolio/i })).toHaveAttribute(
+      'href',
+      '/portfolio?account=settrade',
+    )
+  })
+
+  it('shows no holdings section for other account types', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([card])
+    vi.mocked(txApi.listTransactionPage).mockResolvedValue({ items: [], nextCursor: null })
+    renderAt('/accounts/card')
+    await screen.findByText('KBank Credit Card')
+    expect(screen.queryByText('Holdings')).not.toBeInTheDocument()
+    expect(portfolioApi.getPortfolio).not.toHaveBeenCalled()
+  })
 
   it("shows the balance, loan details and the account's transactions", async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([card])
