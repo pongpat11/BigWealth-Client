@@ -21,10 +21,13 @@ import {
   createHolding,
   deleteDividend,
   deleteHolding,
+  defaultGoldUnit,
   getPortfolio,
+  GOLD_OZ_PER_BAHT,
   GOLD_UNITS,
   GOLD_UNIT_META,
   goldUnitOf,
+  holdingQuantityText,
   listDividends,
   NO_ACCOUNT,
   sortHoldings,
@@ -54,14 +57,14 @@ function native(amount: number, currency: Currency, digits = 2): string {
   return currency === 'THB' ? `฿${text}` : `$${text}`
 }
 
-function quantityText(quantity: number): string {
-  return quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })
-}
-
-/** "2 baht" / "1.5 oz" for gold; the bare number otherwise. */
-function holdingQuantity(h: Pick<Holding, 'assetClass' | 'goldUnit' | 'quantity'>): string {
-  const unit = goldUnitOf(h)
-  return unit ? `${quantityText(h.quantity)} ${GOLD_UNIT_META[unit].short}` : quantityText(h.quantity)
+/**
+ * A form amount re-expressed in another gold unit (`factor` = new units per
+ * old unit), so the holding keeps its value. Blank or invalid input stays.
+ */
+function convertAmount(value: string, factor: number, digits: number): string {
+  const n = Number(value)
+  if (value.trim() === '' || !Number.isFinite(n)) return value
+  return String(Math.round(n * factor * 10 ** digits) / 10 ** digits)
 }
 
 function gainTone(value: number | null): string {
@@ -210,7 +213,10 @@ function HoldingForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [assetClass, setAssetClass] = useState<AssetClass>(initial?.assetClass ?? 'set')
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? 'THB')
-  const [goldUnit, setGoldUnit] = useState<GoldUnit>((initial && goldUnitOf(initial)) ?? 'baht')
+  const initialUnit = initial ? goldUnitOf(initial) : null
+  const [goldUnit, setGoldUnit] = useState<GoldUnit>(initialUnit ?? 'baht')
+  // Set when an edit switched the unit and the amounts were converted.
+  const [converted, setConverted] = useState(false)
   const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '')
   const [avgCost, setAvgCost] = useState(initial ? String(initial.avgCost) : '')
   const [price, setPrice] = useState(initial ? String(initial.price) : '')
@@ -245,7 +251,10 @@ function HoldingForm({
       symbol: symbol.trim().toUpperCase(),
       name: name.trim() || null,
       assetClass,
-      ...(assetClass === 'gold' && { goldUnit }),
+      // Only when it differs from what the server would assume (the currency's
+      // default for a new holding, the current unit for an edit).
+      ...(assetClass === 'gold' &&
+        goldUnit !== (initialUnit ?? defaultGoldUnit(currency)) && { goldUnit }),
       currency,
       quantity: qty,
       avgCost: cost,
@@ -341,16 +350,23 @@ function HoldingForm({
               <span id="holding-unit-label" className={labelClass}>
                 {t('Gold unit')}
               </span>
-              <div className="flex gap-2" role="radiogroup" aria-labelledby="holding-unit-label">
+              <div className="flex gap-2" role="group" aria-labelledby="holding-unit-label">
                 {GOLD_UNITS.map((u) => (
                   <button
                     key={u}
                     type="button"
-                    role="radio"
-                    aria-checked={goldUnit === u}
+                    aria-pressed={goldUnit === u}
                     onClick={() => {
                       if (goldUnit === u) return
                       setGoldUnit(u)
+                      if (initial && initial.assetClass === 'gold') {
+                        // Same gold, other unit: convert the amounts so the value holds.
+                        const perOld = u === 'oz' ? GOLD_OZ_PER_BAHT : 1 / GOLD_OZ_PER_BAHT
+                        setQuantity((q) => convertAmount(q, perOld, 8))
+                        setAvgCost((c) => convertAmount(c, 1 / perOld, 2))
+                        setPrice((p) => convertAmount(p, 1 / perOld, 2))
+                        setConverted(u !== initialUnit)
+                      }
                       // Ounces are usually held in dollars, baht-weight in baht.
                       if (!initial) setCurrency(u === 'oz' ? 'USD' : 'THB')
                     }}
@@ -365,6 +381,13 @@ function HoldingForm({
                   </button>
                 ))}
               </div>
+              {converted && (
+                <p role="status" className="text-xs text-[var(--color-muted)]">
+                  {t('Quantity and prices converted to {unit}. Check them before saving.', {
+                    unit: GOLD_UNIT_META[goldUnit].label,
+                  })}
+                </p>
+              )}
             </div>
           )}
           <Input
@@ -483,7 +506,7 @@ function HoldingRow({
           )}
         </p>
         <p className="tnum text-xs text-[var(--color-muted)]">
-          {holdingQuantity(holding)} · {native(holding.price, holding.currency)}
+          {holdingQuantityText(holding)} · {native(holding.price, holding.currency)}
           {holding.autoPrice && ` · ${priceAge(holding.priceUpdatedAt)}`}
         </p>
         {account ? (
@@ -528,11 +551,13 @@ function holdingGroups(holdings: Holding[]) {
     for (const unit of GOLD_UNITS) {
       const unitRows = rows.filter((h) => goldUnitOf(h) === unit)
       if (unitRows.length === 0) continue
-      const qty = unitRows.reduce((sum, h) => sum + h.quantity, 0)
+      const quantity = unitRows.reduce((sum, h) => sum + h.quantity, 0)
       groups.push({
         key: `gold-${unit}`,
         title: `${ASSET_CLASS_META.gold.label} · ${GOLD_UNIT_META[unit].label}`,
-        total: t('{qty} total', { qty: holdingQuantity({ assetClass: 'gold', goldUnit: unit, quantity: qty }) }),
+        total: t('{qty} total', {
+          qty: holdingQuantityText({ assetClass: 'gold', goldUnit: unit, currency: 'THB', quantity }),
+        }),
         rows: unitRows,
       })
     }

@@ -284,6 +284,8 @@ export const th: Record<string, string> = {
   'Troy ounce': 'ออนซ์',
   baht: 'บาท',
   '{qty} total': 'รวม {qty}',
+  'Quantity and prices converted to {unit}. Check them before saving.':
+    'แปลงจำนวนและราคาเป็น{unit}แล้ว ตรวจสอบก่อนบันทึก',
   Quantity: 'จำนวน',
   'Average cost / unit': 'ต้นทุนเฉลี่ย / หน่วย',
   'Price / unit (optional)': 'ราคา / หน่วย (ไม่บังคับ)',

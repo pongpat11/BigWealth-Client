@@ -16,7 +16,11 @@ vi.mock('@/lib/accounts', () => ({
   deleteAccount: vi.fn(),
 }))
 vi.mock('@/lib/transactions', () => ({ listTransactionPage: vi.fn() }))
-vi.mock('@/lib/portfolio', () => ({ getPortfolio: vi.fn() }))
+vi.mock('@/lib/portfolio', async (importOriginal) => ({
+  // Keep the formatting helpers; stub only the network call.
+  ...(await importOriginal<typeof import('@/lib/portfolio')>()),
+  getPortfolio: vi.fn(),
+}))
 
 const broker = {
   id: 'settrade',

@@ -9,7 +9,7 @@ import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
 import { nextOccurrenceOnOrAfter, todayKey, type RecurringRule } from '../recurring'
-import type { Dividend, DividendList, Holding, Portfolio } from '../portfolio'
+import { goldUnitOf, type Dividend, type DividendList, type Holding, type Portfolio } from '../portfolio'
 import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -209,7 +209,7 @@ function valued(h: StoredHolding): Holding {
   const costBasis = h.quantity * h.avgCost
   return {
     ...h,
-    goldUnit: h.assetClass === 'gold' ? (h.goldUnit ?? 'baht') : null,
+    goldUnit: goldUnitOf(h),
     marketValue,
     costBasis,
     marketValueTHB: marketValue * thbFactor(h.currency),
@@ -459,7 +459,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     if (!existing) notFound('Holding')
     if (method === 'PATCH') {
       assertInvestmentAccount(body?.accountId)
-      const updated = { ...existing, ...(body as Partial<StoredHolding>), priceUpdatedAt: now() }
+      const patch = body as Partial<StoredHolding>
+      // Like the server: a gold edit without a unit keeps the one it counts now.
+      const updated = { ...existing, goldUnit: goldUnitOf(existing), ...patch, priceUpdatedAt: now() }
       holdings = holdings.map((x) => (x.id === param ? updated : x))
       return valued(updated) as T
     }
