@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /**
@@ -35,12 +36,12 @@ export function UndoToast({
             onClick={onUndo}
             className="h-9 shrink-0 rounded-xl px-3 text-sm font-semibold text-[var(--color-toast-action)] hover:bg-current/10"
           >
-            Undo
+            {t('Undo')}
           </button>
         )}
         <button
           type="button"
-          aria-label="Dismiss"
+          aria-label={t('Dismiss')}
           onClick={onDismiss}
           className="flex size-9 shrink-0 items-center justify-center rounded-xl opacity-70 hover:opacity-100"
         >

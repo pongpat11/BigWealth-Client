@@ -1,3 +1,4 @@
+import { dateLocale } from '@/lib/i18n'
 // Month-by-month debt payoff simulation for the snowball / avalanche plans.
 // Each month every debt accrues interest (APR / 12) and gets its minimum;
 // the extra budget, plus the minimums of debts already cleared, goes to the
@@ -68,7 +69,7 @@ function round2(n: number): number {
 
 /** "Mar 2027" for `months` from `from`. */
 export function monthsFromNow(months: number, from: Date = new Date()): string {
-  return new Date(from.getFullYear(), from.getMonth() + months, 1).toLocaleDateString('en-GB', {
+  return new Date(from.getFullYear(), from.getMonth() + months, 1).toLocaleDateString(dateLocale(), {
     month: 'short',
     year: 'numeric',
   })

@@ -21,6 +21,7 @@ import {
 import type { Currency } from '@/types'
 
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
+import { t } from '@/lib/i18n'
 
 const CURRENCIES: Currency[] = ['THB', 'USD']
 
@@ -58,12 +59,12 @@ export function AccountForm({
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     const parsed = balance.trim() === '' ? 0 : Number(balance)
     if (!Number.isFinite(parsed)) {
-      setError('Enter a valid balance.')
+      setError(t('Enter a valid balance.'))
       return
     }
     setError(null)
@@ -81,7 +82,7 @@ export function AccountForm({
         : await createAccount(payload)
       onSaved(saved, isEdit)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -91,7 +92,7 @@ export function AccountForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {isEdit ? 'Edit account' : 'New account'}
+            {isEdit ? t('Edit account') : t('New account')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -120,8 +121,8 @@ export function AccountForm({
 
           <Input
             id="account-name"
-            label="Name"
-            placeholder="e.g. SCB Savings"
+            label={t('Name')}
+            placeholder={t('e.g. SCB Savings')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
@@ -129,8 +130,8 @@ export function AccountForm({
 
           <Input
             id="account-institution"
-            label="Institution (optional)"
-            placeholder="e.g. SCB"
+            label={t('Institution (optional)')}
+            placeholder={t('e.g. SCB')}
             value={institution}
             onChange={(e) => setInstitution(e.target.value)}
           />
@@ -139,7 +140,7 @@ export function AccountForm({
             <div className="flex-1">
               <Input
                 id="account-balance"
-                label={type === 'debt' ? 'Starting amount owed' : 'Starting balance'}
+                label={type === 'debt' ? t('Starting amount owed') : t('Starting balance')}
                 inputMode="decimal"
                 placeholder="0"
                 value={balance}
@@ -148,7 +149,7 @@ export function AccountForm({
             </div>
             <div className="w-28">
               <label htmlFor="account-currency" className="text-[13px] font-medium text-[var(--color-muted)]">
-                Currency
+                {t('Currency')}
               </label>
               <select
                 id="account-currency"
@@ -167,17 +168,17 @@ export function AccountForm({
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add account'}
+              {saving ? t('Saving…') : isEdit ? t('Save changes') : t('Add account')}
             </Button>
           </div>
 
           {isEdit && onDelete && (
             <DeleteButton
               variant="block"
-              label="Delete account"
+              label={t('Delete account')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -215,7 +216,7 @@ function AccountRow({
       <button
         type="button"
         onClick={onEdit}
-        aria-label={`Edit ${account.name}`}
+        aria-label={t('Edit {name}', { name: account.name })}
         className="-mx-1 rounded-lg p-1 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
       >
         <Pencil size={16} aria-hidden />
@@ -229,7 +230,7 @@ function AccountRow({
         >
           {formatMoney(shown, account.currency)}
         </span>
-        <DeleteButton label={`Delete ${account.name}`} onClick={onDelete} className="-mr-2" />
+        <DeleteButton label={t('Delete {name}', { name: account.name })} onClick={onDelete} className="-mr-2" />
       </div>
     </div>
   )
@@ -267,7 +268,7 @@ export function Accounts() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load accounts.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load accounts.')),
       )
     return () => {
       active = false
@@ -303,7 +304,7 @@ export function Accounts() {
   ) {
     setEditingId(null)
     undoable.remove({
-      message: `Deleted “${account.name}”`,
+      message: t('Deleted “{name}”', { name: account.name }),
       hide: () => setItems((list) => (list ?? []).filter((a) => a.id !== account.id)),
       restore: () => setItems((list) => reinsert(list ?? [], account, index)),
       commit: () => deleteAccount(account.id),
@@ -315,8 +316,8 @@ export function Accounts() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Accounts"
-        subtitle="Cash, bank, investments & debts"
+        title={t('Accounts')}
+        subtitle={t('Cash, bank, investments & debts')}
         action={
           <Button
             size="sm"
@@ -326,7 +327,7 @@ export function Accounts() {
             }}
           >
             <Plus size={16} aria-hidden />
-            New
+            {t('New')}
           </Button>
         }
       />
@@ -334,7 +335,7 @@ export function Accounts() {
       {items !== null && items.length > 0 && (
         <Card>
           <CardBody className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--color-muted)]">Net worth</span>
+            <span className="text-sm font-medium text-[var(--color-muted)]">{t('Net worth')}</span>
             <span
               className={
                 'tnum text-xl font-bold ' +
@@ -348,7 +349,7 @@ export function Accounts() {
       )}
 
       {adding && (
-        <Sheet label="New account" onClose={() => setAdding(false)}>
+        <Sheet label={t('New account')} onClose={() => setAdding(false)}>
           <AccountForm
             onSaved={(a) => {
               upsert(a)
@@ -359,7 +360,7 @@ export function Accounts() {
         </Sheet>
       )}
       {editingAccount && (
-        <Sheet label="Edit account" onClose={() => setEditingId(null)}>
+        <Sheet label={t('Edit account')} onClose={() => setEditingId(null)}>
           <AccountForm
             key={editingAccount.id}
             initial={editingAccount}
@@ -387,7 +388,7 @@ export function Accounts() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -398,10 +399,10 @@ export function Accounts() {
             <span className="flex size-12 items-center justify-center rounded-full bg-[var(--color-canvas)] text-[var(--color-muted)]">
               <Landmark size={22} aria-hidden />
             </span>
-            <p className="text-sm text-[var(--color-muted)]">No accounts yet.</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('No accounts yet.')}</p>
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus size={16} aria-hidden />
-              Add your first account
+              {t('Add your first account')}
             </Button>
           </CardBody>
         </Card>

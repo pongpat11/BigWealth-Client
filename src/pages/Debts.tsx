@@ -17,6 +17,7 @@ import {
   type Account,
 } from '@/lib/accounts'
 import { formatTHB } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import { monthsFromNow, simulatePayoff, type PayoffDebt } from '@/lib/payoff'
 
 /** Annual rate at or above which a debt is flagged as expensive. */
@@ -24,8 +25,8 @@ const HIGH_RATE = 15
 
 type Strategy = 'snowball' | 'avalanche'
 const STRATEGIES: { value: Strategy; label: string; hint: string }[] = [
-  { value: 'snowball', label: 'Snowball', hint: 'Smallest balance first — quick wins.' },
-  { value: 'avalanche', label: 'Avalanche', hint: 'Highest interest first — costs the least.' },
+  { value: 'snowball', label: t('Snowball'), hint: t('Smallest balance first — quick wins.') },
+  { value: 'avalanche', label: t('Avalanche'), hint: t('Highest interest first — costs the least.') },
 ]
 
 function money(amount: number, currency: string): string {
@@ -97,22 +98,22 @@ function DebtForm({
       originalAmount: optionalNumber(original),
     }
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     if (!Number.isFinite(owed) || owed < 0) {
-      setError('Enter a valid amount owed.')
+      setError(t('Enter a valid amount owed.'))
       return
     }
     if (loan.interestRate !== null && !(loan.interestRate >= 0 && loan.interestRate <= 100)) {
-      setError('Interest rate must be between 0 and 100.')
+      setError(t('Interest rate must be between 0 and 100.'))
       return
     }
     if (
       (loan.minPayment !== null && !(loan.minPayment >= 0)) ||
       (loan.originalAmount !== null && !(loan.originalAmount >= 0))
     ) {
-      setError('Amounts cannot be negative.')
+      setError(t('Amounts cannot be negative.'))
       return
     }
     setError(null)
@@ -124,7 +125,7 @@ function DebtForm({
         : await createAccount({ ...payload, type: 'debt', currency: 'THB' })
       onSaved(saved)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -134,7 +135,7 @@ function DebtForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {initial ? 'Edit debt' : 'New debt'}
+            {initial ? t('Edit debt') : t('New debt')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -143,22 +144,22 @@ function DebtForm({
           )}
           <Input
             id="debt-name"
-            label="Name"
-            placeholder="e.g. Car loan"
+            label={t('Name')}
+            placeholder={t('e.g. Car loan')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <Input
             id="debt-lender"
-            label="Lender (optional)"
-            placeholder="e.g. TTB"
+            label={t('Lender (optional)')}
+            placeholder={t('e.g. TTB')}
             value={lender}
             onChange={(e) => setLender(e.target.value)}
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="debt-balance"
-              label={initial ? 'Starting amount owed' : 'Amount owed'}
+              label={initial ? t('Starting amount owed') : t('Amount owed')}
               inputMode="decimal"
               placeholder="0"
               value={balance}
@@ -166,49 +167,48 @@ function DebtForm({
             />
             <Input
               id="debt-original"
-              label="Originally borrowed"
+              label={t('Originally borrowed')}
               inputMode="decimal"
-              placeholder="Optional"
+              placeholder={t('Optional')}
               value={original}
               onChange={(e) => setOriginal(e.target.value)}
             />
             <Input
               id="debt-rate"
-              label="Interest rate (% / year)"
+              label={t('Interest rate (% / year)')}
               inputMode="decimal"
-              placeholder="Optional"
+              placeholder={t('Optional')}
               value={rate}
               onChange={(e) => setRate(e.target.value)}
             />
             <Input
               id="debt-min"
-              label="Minimum payment / month"
+              label={t('Minimum payment / month')}
               inputMode="decimal"
-              placeholder="Optional"
+              placeholder={t('Optional')}
               value={minPayment}
               onChange={(e) => setMinPayment(e.target.value)}
             />
           </div>
           {initial && (
             <p className="text-xs text-[var(--color-muted)]">
-              Payments recorded as transactions on this account lower what you owe
-              automatically.
+              {t('Payments recorded as transactions on this account lower what you owe automatically.')}
             </p>
           )}
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : initial ? 'Save changes' : 'Add debt'}
+              {saving ? t('Saving…') : initial ? t('Save changes') : t('Add debt')}
             </Button>
           </div>
 
           {initial && (
             <DeleteButton
               variant="block"
-              label="Delete debt"
+              label={t('Delete debt')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -238,15 +238,15 @@ function DebtRow({
   const highRate = (debt.interestRate ?? 0) >= HIGH_RATE
   const terms = [
     debt.interestRate != null ? `${debt.interestRate}%` : null,
-    debt.minPayment != null ? `${money(debt.minPayment, debt.currency)}/mo` : null,
-    paidOffIn !== undefined ? `Paid off ${monthsFromNow(paidOffIn)}` : null,
+    debt.minPayment != null ? t('{amount}/mo', { amount: money(debt.minPayment, debt.currency) }) : null,
+    paidOffIn !== undefined ? t('Paid off {month}', { month: monthsFromNow(paidOffIn) }) : null,
   ].filter(Boolean)
 
   return (
     <button
       type="button"
       onClick={() => onEdit(debt)}
-      aria-label={`Edit debt ${debt.name}`}
+      aria-label={t('Edit debt {name}', { name: debt.name })}
       className="flex w-full items-start gap-3 py-3.5 text-left transition-colors hover:bg-[var(--color-canvas)]"
     >
       <span className="tnum flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--color-canvas)] text-xs font-semibold text-[var(--color-muted)]">
@@ -268,7 +268,10 @@ function DebtRow({
           <>
             <ProgressBar value={paidPct} max={100} tone="brand" />
             <p className="tnum text-xs text-[var(--color-muted)]">
-              {Math.round(paidPct)}% paid off · {money(original, debt.currency)} borrowed
+              {t('{pct}% paid off · {amount} borrowed', {
+                pct: Math.round(paidPct),
+                amount: money(original, debt.currency),
+              })}
             </p>
           </>
         )}
@@ -278,7 +281,7 @@ function DebtRow({
             {highRate && (
               <span className="flex items-center gap-1 font-medium text-[var(--color-loss)]">
                 <AlertTriangle size={12} aria-hidden />
-                High interest
+                {t('High interest')}
               </span>
             )}
           </p>
@@ -302,7 +305,7 @@ export function Debts() {
       .then((rows) => active && setDebts(rows.filter((a) => a.type === 'debt')))
       .catch(
         (err) =>
-          active && setError(err instanceof ApiError ? err.message : 'Could not load debts.'),
+          active && setError(err instanceof ApiError ? err.message : t('Could not load debts.')),
       )
     return () => {
       active = false
@@ -320,6 +323,7 @@ export function Debts() {
   const extraValue = Math.max(Number(extra) || 0, 0)
   const plan = useMemo(() => simulatePayoff(toPlan(ordered), extraValue), [ordered, extraValue])
   const otherStrategy: Strategy = strategy === 'avalanche' ? 'snowball' : 'avalanche'
+  const otherLabel = STRATEGIES.find((s) => s.value === otherStrategy)!.label
   const otherPlan = useMemo(
     () => simulatePayoff(toPlan(sortDebts(debts ?? [], otherStrategy)), extraValue),
     [debts, otherStrategy, extraValue],
@@ -349,7 +353,7 @@ export function Debts() {
     closeForm()
     const index = (debts ?? []).findIndex((a) => a.id === debt.id)
     undoable.remove({
-      message: `Deleted “${debt.name}”`,
+      message: t('Deleted “{name}”', { name: debt.name }),
       hide: () => setDebts((prev) => (prev ?? []).filter((a) => a.id !== debt.id)),
       restore: () => setDebts((prev) => reinsert(prev ?? [], debt, index)),
       commit: () => deleteAccount(debt.id),
@@ -359,7 +363,7 @@ export function Debts() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Debts"
+        title={t('Debts')}
         action={
           <Button
             size="sm"
@@ -373,13 +377,13 @@ export function Debts() {
             }}
           >
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
 
       {formOpen && (
-        <Sheet label={editing ? 'Edit debt' : 'New debt'} onClose={closeForm}>
+        <Sheet label={editing ? t('Edit debt') : t('New debt')} onClose={closeForm}>
           <DebtForm
             key={editing?.id ?? 'new'}
             initial={editing ?? undefined}
@@ -404,7 +408,7 @@ export function Debts() {
       {!error && debts === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -416,7 +420,7 @@ export function Debts() {
               <CreditCard size={22} aria-hidden />
             </span>
             <p className="text-sm text-[var(--color-muted)]">
-              No debts tracked. Add a loan or credit card to plan paying it off.
+              {t('No debts tracked. Add a loan or credit card to plan paying it off.')}
             </p>
           </CardBody>
         </Card>
@@ -427,22 +431,24 @@ export function Debts() {
           <Card>
             <CardBody className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-                Total owed
+                {t('Total owed')}
               </p>
               <p className="tnum text-[22px] font-bold text-[var(--color-loss)]">
                 {formatTHB(totalOwed)}
               </p>
               <p className="tnum text-xs text-[var(--color-muted)]">
-                {totalMin > 0 && `Minimum payments ${formatTHB(totalMin)}/mo`}
+                {totalMin > 0 && t('Minimum payments {amount}/mo', { amount: formatTHB(totalMin) })}
                 {totalMin > 0 && foreignCount > 0 && ' · '}
                 {foreignCount > 0 &&
-                  `Excludes ${foreignCount} non-THB ${foreignCount === 1 ? 'debt' : 'debts'}`}
+                  (foreignCount === 1
+                    ? t('Excludes 1 non-THB debt')
+                    : t('Excludes {n} non-THB debts', { n: foreignCount }))}
               </p>
             </CardBody>
           </Card>
 
           <div className="space-y-1.5">
-            <div className="flex gap-2" role="group" aria-label="Payoff strategy">
+            <div className="flex gap-2" role="group" aria-label={t('Payoff strategy')}>
               {STRATEGIES.map((s) => (
                 <button
                   key={s.value}
@@ -461,8 +467,8 @@ export function Debts() {
               ))}
             </div>
             <p className="px-1 text-xs text-[var(--color-muted)]">
-              {STRATEGIES.find((s) => s.value === strategy)?.hint} Pay extra toward #1, minimums
-              on the rest.
+              {STRATEGIES.find((s) => s.value === strategy)?.hint}{' '}
+              {t('Pay extra toward #1, minimums on the rest.')}
             </p>
           </div>
 
@@ -473,7 +479,7 @@ export function Debts() {
                   <>
                   <Input
                     id="payoff-extra"
-                    label="Extra per month (฿)"
+                    label={t('Extra per month (฿)')}
                     type="number"
                     inputMode="decimal"
                     min="0"
@@ -484,35 +490,34 @@ export function Debts() {
                   />
                   {plan.months === null ? (
                     <p role="status" className="text-sm text-[var(--color-loss)]">
-                      The payments don't cover the interest, so these debts never get paid off.
-                      Add an extra amount per month.
+                      {t("The payments don't cover the interest, so these debts never get paid off. Add an extra amount per month.")}
                     </p>
                   ) : (
                     <div role="status" className="grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-[var(--color-muted)]">
-                          {unplanned.length > 0 ? 'Planned debts paid off by' : 'Debt-free by'}
+                          {unplanned.length > 0 ? t('Planned debts paid off by') : t('Debt-free by')}
                         </p>
                         <p className="tnum text-lg font-bold text-[var(--color-ink)]">
                           {monthsFromNow(plan.months)}
                         </p>
                         <p className="tnum text-xs text-[var(--color-muted)]">
-                          {plan.months} {plan.months === 1 ? 'month' : 'months'}
+                          {plan.months === 1 ? t('1 month') : t('{n} months', { n: plan.months })}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-[var(--color-muted)]">Interest you'll pay</p>
+                        <p className="text-xs text-[var(--color-muted)]">{t("Interest you'll pay")}</p>
                         <p className="tnum text-lg font-bold text-[var(--color-loss)]">
                           {formatTHB(plan.totalInterest)}
                         </p>
                         <p className="tnum text-xs text-[var(--color-muted)]">
                           {otherPlan.months === null
-                            ? `${otherStrategy[0].toUpperCase()}${otherStrategy.slice(1)} never pays off`
+                            ? t('{strategy} never pays off', { strategy: otherLabel })
                             : interestDiff > 0.5
-                              ? `${formatTHB(interestDiff)} less than ${otherStrategy}`
+                              ? t('{amount} less than {strategy}', { amount: formatTHB(interestDiff), strategy: otherLabel })
                               : interestDiff < -0.5
-                              ? `${formatTHB(-interestDiff)} more than ${otherStrategy}`
-                              : `Same as ${otherStrategy}`}
+                              ? t('{amount} more than {strategy}', { amount: formatTHB(-interestDiff), strategy: otherLabel })
+                              : t('Same as {strategy}', { strategy: otherLabel })}
                         </p>
                       </div>
                     </div>
@@ -521,7 +526,7 @@ export function Debts() {
                 )}
                 {unplanned.length > 0 && (
                   <p className="text-xs text-[var(--color-muted)]">
-                    Not in the payoff plan yet (add a minimum payment and interest rate):{' '}
+                    {t('Not in the payoff plan yet (add a minimum payment and interest rate):')}{' '}
                     {unplanned.map((d) => d.name).join(', ')}
                   </p>
                 )}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError } from '@/lib/api'
 import { UndoToast } from '@/components/ui/UndoToast'
+import { t } from '@/lib/i18n'
 
 /** How long a deleted item can still be brought back. */
 export const UNDO_MS = 5000
@@ -52,7 +53,7 @@ export function useUndoableDelete(): {
       (err: unknown) => {
         if (!mounted.current) return
         p.restore()
-        const reason = err instanceof ApiError ? err.message : 'Try again.'
+        const reason = err instanceof ApiError ? err.message : t('Try again.')
         setToast({ kind: 'error', id: ++nextId.current, message: `Couldn't delete. ${reason}` })
       },
     )

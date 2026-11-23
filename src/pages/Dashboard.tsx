@@ -26,26 +26,27 @@ import {
   formatTHB,
   formatTHBCompact,
 } from '@/lib/format'
+import { dateLocale, t } from '@/lib/i18n'
 
 const FALLBACK_COLOR = '#94a3b8'
 
 // Allocation is by account type until a Portfolio/holdings API exists.
 const ALLOCATION_TYPES: { key: Exclude<AccountType, 'debt'>; label: string; color: string }[] = [
-  { key: 'cash', label: 'Cash', color: '#94a3b8' },
-  { key: 'bank', label: 'Bank', color: '#059669' },
-  { key: 'investment', label: 'Investments', color: '#6366f1' },
+  { key: 'cash', label: t('Cash'), color: '#94a3b8' },
+  { key: 'bank', label: t('Bank'), color: '#059669' },
+  { key: 'investment', label: t('Investments'), color: '#6366f1' },
 ]
 
 function greetingForNow(): string {
   const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 18) return 'Good afternoon'
-  return 'Good evening'
+  if (h < 12) return t('Good morning')
+  if (h < 18) return t('Good afternoon')
+  return t('Good evening')
 }
 
 /** 'YYYY-MM' → short month label, e.g. '2026-07' → 'Jul'. */
 function monthLabel(month: string): string {
-  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-GB', {
+  return new Date(`${month}-01T00:00:00Z`).toLocaleDateString(dateLocale(), {
     month: 'short',
     timeZone: 'UTC',
   })
@@ -67,10 +68,10 @@ function RecentRow({ tx }: { tx: Transaction }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || cat?.name || 'Uncategorized'}
+          {tx.note || cat?.name || t('Uncategorized')}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
-          {cat?.name ?? 'Uncategorized'} · {formatDate(tx.date)}
+          {cat?.name ?? t('Uncategorized')} · {formatDate(tx.date)}
         </p>
       </div>
       <span
@@ -104,7 +105,7 @@ export function Dashboard() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load your overview.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load your overview.')),
       )
     // Greeting is best-effort; ignore failures.
     me()
@@ -152,7 +153,7 @@ export function Dashboard() {
       {!error && !loaded && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -164,12 +165,12 @@ export function Dashboard() {
               <Landmark size={22} aria-hidden />
             </span>
             <p className="text-sm text-[var(--color-muted)]">
-              Track your money by adding your first account.
+              {t('Track your money by adding your first account.')}
             </p>
             <Link to="/accounts">
               <Button size="sm">
                 <Plus size={16} aria-hidden />
-                Add your first account
+                {t('Add your first account')}
               </Button>
             </Link>
           </CardBody>
@@ -180,11 +181,11 @@ export function Dashboard() {
         <>
           {/* Net worth hero */}
           <section
-            aria-label="Net worth"
+            aria-label={t('Net worth')}
             className="rounded-2xl bg-brand-600 p-5 text-white shadow-[var(--shadow-card)]"
           >
             <p className="text-[11px] font-semibold uppercase tracking-widest text-brand-100">
-              Net worth
+              {t('Net worth')}
             </p>
             <p className="tnum mt-1 text-[34px] font-bold leading-tight">
               {formatTHB(summary.netWorth)}
@@ -193,7 +194,7 @@ export function Dashboard() {
               <span className="tnum rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
                 {summary.monthDelta >= 0 ? '▲' : '▼'} {formatSignedTHB(summary.monthDelta)}
               </span>
-              <span className="text-xs text-brand-100">this month</span>
+              <span className="text-xs text-brand-100">{t('this month')}</span>
             </div>
           </section>
 
@@ -202,7 +203,7 @@ export function Dashboard() {
             <Card>
               <CardBody className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-                  Assets
+                  {t('Assets')}
                 </p>
                 <p className="tnum text-[22px] font-bold text-[var(--color-ink)]">
                   {formatTHBCompact(summary.totalAssets)}
@@ -212,7 +213,7 @@ export function Dashboard() {
             <Card>
               <CardBody className="space-y-1">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-                  Debts
+                  {t('Debts')}
                 </p>
                 <p className="tnum text-[22px] font-bold text-[var(--color-loss)]">
                   {formatTHBCompact(summary.totalDebt)}
@@ -227,7 +228,9 @@ export function Dashboard() {
           <Card>
             <CardHeader
               title={
-                currentMonth ? `Cash flow — ${monthLabel(currentMonth.month)}` : 'Cash flow'
+                currentMonth
+                  ? t('Cash flow — {month}', { month: monthLabel(currentMonth.month) })
+                  : t('Cash flow')
               }
               action={
                 <span
@@ -271,7 +274,7 @@ export function Dashboard() {
           {/* Allocation by account type (asset classes land with Portfolio) */}
           {allocation.slices.length > 0 && (
             <Card>
-              <CardHeader title="Allocation" />
+              <CardHeader title={t('Allocation')} />
               <CardBody className="flex items-center gap-4">
                 <div className="h-36 w-36 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
@@ -320,20 +323,20 @@ export function Dashboard() {
           {/* Recent transactions */}
           <Card>
             <CardHeader
-              title="Recent"
+              title={t('Recent')}
               action={
                 <Link
                   to="/transactions"
                   className="text-xs font-medium text-brand-600 hover:text-brand-700"
                 >
-                  See all →
+                  {t('See all →')}
                 </Link>
               }
             />
             <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
               {recent.length === 0 ? (
                 <p className="py-3 text-sm text-[var(--color-muted)]">
-                  No transactions yet.
+                  {t('No transactions yet.')}
                 </p>
               ) : (
                 recent.map((tx) => <RecentRow key={tx.id} tx={tx} />)

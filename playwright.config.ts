@@ -12,6 +12,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
+    // The app follows the browser language; the specs assert English text.
+    locale: 'en-US',
     baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure',
     ...(process.env.CI ? {} : { channel: 'chrome' }),

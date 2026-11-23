@@ -10,6 +10,7 @@ import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDateTime } from '@/lib/format'
 import { listTransactionPage, type Transaction } from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
+import { t } from '@/lib/i18n'
 import { AccountForm } from './Accounts'
 
 const FALLBACK_COLOR = '#94a3b8'
@@ -31,10 +32,10 @@ function TxRow({ tx }: { tx: Transaction }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || cat?.name || 'Uncategorized'}
+          {tx.note || cat?.name || t('Uncategorized')}
         </p>
         <p className="truncate text-xs text-[var(--color-muted)]">
-          {cat?.name ?? 'Uncategorized'} · {formatDateTime(tx.date, tx.timezone)}
+          {cat?.name ?? t('Uncategorized')} · {formatDateTime(tx.date, tx.timezone)}
         </p>
       </div>
       <span
@@ -76,7 +77,7 @@ function AccountDetailView({ id }: { id: string }) {
       })
       .catch(
         (err) =>
-          live && setError(err instanceof ApiError ? err.message : 'Could not load this account.'),
+          live && setError(err instanceof ApiError ? err.message : t('Could not load this account.')),
       )
     return () => {
       live = false
@@ -91,7 +92,7 @@ function AccountDetailView({ id }: { id: string }) {
       setTxs((prev) => [...prev, ...page.items])
       setCursor(page.nextCursor)
     } catch {
-      setError('Could not load more transactions.')
+      setError(t('Could not load more transactions.'))
     } finally {
       setLoadingMore(false)
     }
@@ -109,7 +110,7 @@ function AccountDetailView({ id }: { id: string }) {
       className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)]"
     >
       <ArrowLeft size={16} aria-hidden />
-      Accounts
+      {t('Accounts')}
     </Link>
   )
 
@@ -134,7 +135,7 @@ function AccountDetailView({ id }: { id: string }) {
         {back}
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       </div>
@@ -147,7 +148,7 @@ function AccountDetailView({ id }: { id: string }) {
         {back}
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">This account doesn't exist anymore.</p>
+            <p className="text-sm text-[var(--color-muted)]">{t("This account doesn't exist anymore.")}</p>
           </CardBody>
         </Card>
       </div>
@@ -157,12 +158,12 @@ function AccountDetailView({ id }: { id: string }) {
   const isDebt = account.type === 'debt'
   const typeLabel = ACCOUNT_TYPES.find((t) => t.value === account.type)?.label ?? account.type
   const details: [string, string][] = [
-    ['Type', typeLabel],
-    ['Currency', account.currency],
-    [isDebt ? 'Owed at setup' : 'Starting balance', formatMoney(account.balance, account.currency)],
-    ...(account.interestRate != null ? [['Interest', `${account.interestRate}% a year`] as [string, string]] : []),
+    [t('Type'), typeLabel],
+    [t('Currency'), account.currency],
+    [isDebt ? t('Owed at setup') : t('Starting balance'), formatMoney(account.balance, account.currency)],
+    ...(account.interestRate != null ? [[t('Interest'), t('{rate}% a year', { rate: account.interestRate })] as [string, string]] : []),
     ...(account.minPayment != null
-      ? [['Minimum payment', `${formatMoney(account.minPayment, account.currency)}/mo`] as [string, string]]
+      ? [[t('Minimum payment'), t('{amount}/mo', { amount: formatMoney(account.minPayment, account.currency) })] as [string, string]]
       : []),
   ]
 
@@ -181,12 +182,12 @@ function AccountDetailView({ id }: { id: string }) {
         </div>
         <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
           <Pencil size={14} aria-hidden />
-          Edit
+          {t('Edit')}
         </Button>
       </div>
 
       {editing && (
-        <Sheet label="Edit account" onClose={() => setEditing(false)}>
+        <Sheet label={t('Edit account')} onClose={() => setEditing(false)}>
           <AccountForm
             initial={account}
             onSaved={(a) => {
@@ -206,11 +207,11 @@ function AccountDetailView({ id }: { id: string }) {
       )}
 
       <section
-        aria-label="Balance"
+        aria-label={t('Balance')}
         className="rounded-2xl bg-[var(--color-surface)] p-5 shadow-[var(--shadow-card)]"
       >
         <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-          {isDebt ? 'Owed' : 'Balance'}
+          {isDebt ? t('Owed') : t('Balance')}
         </p>
         <p
           className={
@@ -231,11 +232,11 @@ function AccountDetailView({ id }: { id: string }) {
       </section>
 
       <Card>
-        <CardHeader title="Transactions" />
+        <CardHeader title={t('Transactions')} />
         <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
           {txs.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--color-muted)]">
-              No transactions in this account yet.
+              {t('No transactions in this account yet.')}
             </p>
           ) : (
             txs.map((tx) => <TxRow key={tx.id} tx={tx} />)
@@ -244,7 +245,7 @@ function AccountDetailView({ id }: { id: string }) {
       </Card>
       {cursor && (
         <Button variant="secondary" className="w-full" onClick={loadMore} disabled={loadingMore}>
-          {loadingMore ? 'Loading…' : 'Load more'}
+          {loadingMore ? t('Loading…') : t('Load more')}
         </Button>
       )}
     </div>

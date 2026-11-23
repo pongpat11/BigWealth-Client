@@ -18,10 +18,11 @@ import {
   type Goal,
 } from '@/lib/goals'
 import { formatTHB } from '@/lib/format'
+import { dateLocale, t } from '@/lib/i18n'
 
 function formatDeadline(date: string): string {
   const [y, m, d] = date.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', {
+  return new Date(y, m - 1, d).toLocaleDateString(dateLocale(), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -31,11 +32,15 @@ function formatDeadline(date: string): string {
 /** One line under the progress bar: what's left and what it takes. */
 function planLine(goal: Goal): string {
   const plan = goalPlan(goal)
-  if (plan.remaining === 0) return 'Goal reached'
-  if (!goal.deadline) return `${formatTHB(plan.remaining)} to go`
-  if (plan.overdue) return `${formatTHB(plan.remaining)} to go · due ${formatDeadline(goal.deadline)}`
-  const months = plan.monthsLeft === 1 ? '1 month left' : `${plan.monthsLeft} months left`
-  return `${months} · ${formatTHB(plan.perMonth ?? 0)}/mo`
+  if (plan.remaining === 0) return t('Goal reached')
+  const remaining = formatTHB(plan.remaining)
+  if (!goal.deadline) return t('{amount} to go', { amount: remaining })
+  if (plan.overdue) {
+    return t('{amount} to go · due {date}', { amount: remaining, date: formatDeadline(goal.deadline) })
+  }
+  const months =
+    plan.monthsLeft === 1 ? t('1 month left') : t('{n} months left', { n: plan.monthsLeft ?? 0 })
+  return `${months} · ${t('{amount}/mo', { amount: formatTHB(plan.perMonth ?? 0) })}`
 }
 
 function GoalForm({
@@ -61,15 +66,15 @@ function GoalForm({
     const targetValue = Number(target)
     const savedValue = saved.trim() === '' ? 0 : Number(saved)
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     if (!Number.isFinite(targetValue) || targetValue <= 0) {
-      setError('Enter a target greater than 0.')
+      setError(t('Enter a target greater than 0.'))
       return
     }
     if (!Number.isFinite(savedValue) || savedValue < 0) {
-      setError('Saved amount cannot be negative.')
+      setError(t('Saved amount cannot be negative.'))
       return
     }
     setError(null)
@@ -84,7 +89,7 @@ function GoalForm({
       const result = initial ? await updateGoal(initial.id, input) : await createGoal(input)
       onSaved(result, Boolean(initial))
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -94,7 +99,7 @@ function GoalForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {initial ? 'Edit goal' : 'New goal'}
+            {initial ? t('Edit goal') : t('New goal')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -103,15 +108,15 @@ function GoalForm({
           )}
           <Input
             id="goal-name"
-            label="Name"
-            placeholder="e.g. Emergency fund"
+            label={t('Name')}
+            placeholder={t('e.g. Emergency fund')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="goal-target"
-              label="Target (฿)"
+              label={t('Target (฿)')}
               type="number"
               inputMode="decimal"
               min="0"
@@ -122,7 +127,7 @@ function GoalForm({
             />
             <Input
               id="goal-saved"
-              label="Saved so far (฿)"
+              label={t('Saved so far (฿)')}
               type="number"
               inputMode="decimal"
               min="0"
@@ -134,7 +139,7 @@ function GoalForm({
           </div>
           <Input
             id="goal-deadline"
-            label="Deadline (optional)"
+            label={t('Deadline (optional)')}
             type="date"
             value={deadline}
             onChange={(e) => setDeadline(e.target.value)}
@@ -142,17 +147,17 @@ function GoalForm({
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : initial ? 'Save changes' : 'Add goal'}
+              {saving ? t('Saving…') : initial ? t('Save changes') : t('Add goal')}
             </Button>
           </div>
 
           {initial && (
             <DeleteButton
               variant="block"
-              label="Delete goal"
+              label={t('Delete goal')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -170,7 +175,7 @@ function GoalCard({ goal, onEdit }: { goal: Goal; onEdit: (g: Goal) => void }) {
     <button
       type="button"
       onClick={() => onEdit(goal)}
-      aria-label={`Edit goal ${goal.name}`}
+      aria-label={t('Edit goal {name}', { name: goal.name })}
       className={
         'block w-full rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] p-4 text-left shadow-[var(--shadow-card)] transition-colors hover:bg-[var(--color-canvas)] ' +
         (done ? 'opacity-70' : '')
@@ -208,7 +213,7 @@ export function Goals() {
       .then((rows) => active && setItems(rows))
       .catch(
         (err) =>
-          active && setError(err instanceof ApiError ? err.message : 'Could not load goals.'),
+          active && setError(err instanceof ApiError ? err.message : t('Could not load goals.')),
       )
     return () => {
       active = false
@@ -234,7 +239,7 @@ export function Goals() {
     closeForm()
     const index = (items ?? []).findIndex((g) => g.id === goal.id)
     undoable.remove({
-      message: `Deleted “${goal.name}”`,
+      message: t('Deleted “{name}”', { name: goal.name }),
       hide: () => setItems((prev) => (prev ?? []).filter((g) => g.id !== goal.id)),
       restore: () => setItems((prev) => reinsert(prev ?? [], goal, index)),
       commit: () => deleteGoal(goal.id),
@@ -249,7 +254,7 @@ export function Goals() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Goals"
+        title={t('Goals')}
         action={
           <Button
             size="sm"
@@ -263,13 +268,13 @@ export function Goals() {
             }}
           >
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
 
       {formOpen && (
-        <Sheet label={editing ? 'Edit goal' : 'New goal'} onClose={closeForm}>
+        <Sheet label={editing ? t('Edit goal') : t('New goal')} onClose={closeForm}>
           <GoalForm
             key={editing?.id ?? 'new'}
             initial={editing ?? undefined}
@@ -294,7 +299,7 @@ export function Goals() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -306,7 +311,7 @@ export function Goals() {
               <Target size={22} aria-hidden />
             </span>
             <p className="text-sm text-[var(--color-muted)]">
-              No goals yet. Add something you're saving for.
+              {t("No goals yet. Add something you're saving for.")}
             </p>
           </CardBody>
         </Card>

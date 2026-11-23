@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 // "Heads up" alerts for the Dashboard, derived on the client from data the app
 // already loads: budgets near or over their limit, recurring entries coming
 // up, and savings goals with a close deadline.
@@ -35,9 +36,9 @@ function daysFrom(today: Date, date: string): number {
 }
 
 function whenText(days: number): string {
-  if (days <= 0) return 'today'
-  if (days === 1) return 'tomorrow'
-  return `in ${days} days`
+  if (days <= 0) return t('today')
+  if (days === 1) return t('tomorrow')
+  return t('in {n} days', { n: days })
 }
 
 export function buildAlerts(
@@ -59,8 +60,12 @@ export function buildAlerts(
       alerts.push({
         id: `budget-${b.id}`,
         tone: 'danger',
-        title: `${name} is over budget`,
-        detail: `${formatTHB(b.spent)} of ${formatTHB(b.limit)} · ${formatTHB(b.spent - b.limit)} over`,
+        title: t('{name} is over budget', { name }),
+        detail: t('{spent} of {limit} · {over} over', {
+          spent: formatTHB(b.spent),
+          limit: formatTHB(b.limit),
+          over: formatTHB(b.spent - b.limit),
+        }),
         to: '/budgets',
       })
     } else if (b.spent >= b.limit * BUDGET_WARN_AT) {
@@ -69,8 +74,11 @@ export function buildAlerts(
       alerts.push({
         id: `budget-${b.id}`,
         tone: 'warn',
-        title: `${name} at ${pct}% of budget`,
-        detail: `${formatTHB(left)} left for ${daysLeft === 1 ? 'today' : `${daysLeft} days`}`,
+        title: t('{name} at {pct}% of budget', { name, pct }),
+        detail:
+          daysLeft === 1
+            ? t('{left} left for today', { left: formatTHB(left) })
+            : t('{left} left for {n} days', { left: formatTHB(left), n: daysLeft }),
         to: '/budgets',
       })
     }
@@ -80,12 +88,15 @@ export function buildAlerts(
     if (!r.nextDate) continue
     const days = daysFrom(today, r.nextDate)
     if (days < 0 || days > RECURRING_DAYS_AHEAD) continue
-    const name = r.note || r.category?.name || 'Recurring entry'
+    const name = r.note || r.category?.name || t('Recurring entry')
     const amount = r.currency === 'THB' ? formatTHB(r.amount) : `${r.amount} ${r.currency}`
     alerts.push({
       id: `recurring-${r.id}`,
       tone: 'info',
-      title: r.type === 'income' ? `${name} arrives ${whenText(days)}` : `${name} due ${whenText(days)}`,
+      title:
+        r.type === 'income'
+          ? t('{name} arrives {when}', { name, when: whenText(days) })
+          : t('{name} due {when}', { name, when: whenText(days) }),
       detail: `${r.type === 'income' ? '+' : '−'}${amount}${r.account ? ` · ${r.account.name}` : ''}`,
       to: '/recurring',
     })
@@ -95,11 +106,14 @@ export function buildAlerts(
     if (!g.deadline || g.saved >= g.target) continue
     const days = daysFrom(today, g.deadline)
     if (days > GOAL_DAYS_AHEAD) continue
-    const toGo = `${formatTHB(g.target - g.saved)} to go`
+    const toGo = t('{amount} to go', { amount: formatTHB(g.target - g.saved) })
     alerts.push({
       id: `goal-${g.id}`,
       tone: days < 0 ? 'warn' : 'info',
-      title: days < 0 ? `${g.name} is past its deadline` : `${g.name} due ${whenText(days)}`,
+      title:
+        days < 0
+          ? t('{name} is past its deadline', { name: g.name })
+          : t('{name} due {when}', { name: g.name, when: whenText(days) }),
       detail: toGo,
       to: '/goals',
     })

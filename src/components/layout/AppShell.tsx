@@ -18,28 +18,29 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
+import { t } from '@/lib/i18n'
 import { runRecurring } from '@/lib/recurring'
 import { ErrorBoundary } from './ErrorBoundary'
 import { OfflineBanner } from './OfflineBanner'
 
 // Primary tabs — shown in the mobile bottom bar and at the top of the sidebar.
 const primaryNav = [
-  { to: '/', label: 'Home', icon: Home, end: true },
-  { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight },
-  { to: '/portfolio', label: 'Portfolio', icon: PieChart },
-  { to: '/budgets', label: 'Budgets', icon: Wallet },
+  { to: '/', label: t('Home'), icon: Home, end: true },
+  { to: '/transactions', label: t('Transactions'), icon: ArrowLeftRight },
+  { to: '/portfolio', label: t('Portfolio'), icon: PieChart },
+  { to: '/budgets', label: t('Budgets'), icon: Wallet },
 ] as const
 
 // Secondary screens — behind "More" on mobile, listed directly on desktop.
 const secondaryNav = [
-  { to: '/recurring', label: 'Recurring', icon: Repeat },
-  { to: '/goals', label: 'Goals', icon: Target },
-  { to: '/debts', label: 'Debts', icon: CreditCard },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/accounts', label: 'Accounts', icon: Landmark },
-  { to: '/categories', label: 'Categories', icon: Tag },
-  { to: '/labels', label: 'Labels', icon: Tags },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/recurring', label: t('Recurring'), icon: Repeat },
+  { to: '/goals', label: t('Goals'), icon: Target },
+  { to: '/debts', label: t('Debts'), icon: CreditCard },
+  { to: '/reports', label: t('Reports'), icon: BarChart3 },
+  { to: '/accounts', label: t('Accounts'), icon: Landmark },
+  { to: '/categories', label: t('Categories'), icon: Tag },
+  { to: '/labels', label: t('Labels'), icon: Tags },
+  { to: '/settings', label: t('Settings'), icon: Settings },
 ] as const
 
 function SidebarLink({
@@ -140,7 +141,7 @@ export function AppShell() {
             BigWealth
           </span>
         </div>
-        <nav className="flex flex-col gap-1" aria-label="Primary">
+        <nav className="flex flex-col gap-1" aria-label={t('Primary')}>
           {primaryNav.map((item) => (
             <SidebarLink key={item.to} {...item} />
           ))}
@@ -155,7 +156,7 @@ export function AppShell() {
           className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--color-muted)] transition-colors hover:bg-[var(--color-canvas)] hover:text-[var(--color-loss)]"
         >
           <LogOut size={18} aria-hidden />
-          Log out
+          {t('Log out')}
         </button>
       </aside>
 
@@ -170,13 +171,13 @@ export function AppShell() {
 
       {/* Mobile bottom tab bar */}
       <nav
-        aria-label="Primary"
+        aria-label={t('Primary')}
         className="fixed inset-x-0 bottom-0 z-20 flex border-t border-[var(--color-line)] bg-[var(--color-surface)] px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1 lg:hidden"
       >
         {primaryNav.map((item) => (
           <TabLink key={item.to} {...item} />
         ))}
-        <TabLink to="/more" label="More" icon={MoreHorizontal} />
+        <TabLink to="/more" label={t('More')} icon={MoreHorizontal} />
       </nav>
     </div>
   )

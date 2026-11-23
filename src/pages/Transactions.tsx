@@ -20,6 +20,7 @@ import {
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
 import { listCategories, type Category } from '@/lib/categories'
+import { t } from '@/lib/i18n'
 import { listLabels, type Label } from '@/lib/labels'
 import {
   createTransaction,
@@ -114,11 +115,11 @@ function TransactionForm({
     setError(null)
     const value = Number(amount)
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Enter an amount greater than 0.')
+      setError(t('Enter an amount greater than 0.'))
       return
     }
     if (!categoryId) {
-      setError('Pick a category.')
+      setError(t('Pick a category.'))
       return
     }
     setSaving(true)
@@ -140,7 +141,7 @@ function TransactionForm({
         : await createTransaction(input)
       onSaved(saved, isEdit)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
     } finally {
       setSaving(false)
     }
@@ -151,7 +152,7 @@ function TransactionForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {isEdit ? 'Edit transaction' : 'New transaction'}
+            {isEdit ? t('Edit transaction') : t('New transaction')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -185,7 +186,7 @@ function TransactionForm({
             <div className="flex-1">
               <Input
                 id="amount"
-                label="Amount"
+                label={t('Amount')}
                 type="number"
                 inputMode="decimal"
                 min="0"
@@ -197,7 +198,7 @@ function TransactionForm({
             </div>
             <div className="w-28">
               <label htmlFor="currency" className="text-[13px] font-medium text-[var(--color-muted)]">
-                Currency
+                {t('Currency')}
               </label>
               <select
                 id="currency"
@@ -216,7 +217,7 @@ function TransactionForm({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="category" className="text-[13px] font-medium text-[var(--color-muted)]">
-              Category
+              {t('Category')}
             </label>
             <select
               id="category"
@@ -227,7 +228,7 @@ function TransactionForm({
               }}
               className={selectClass}
             >
-              <option value="">Select…</option>
+              <option value="">{t('Select…')}</option>
               {topLevel.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -239,7 +240,7 @@ function TransactionForm({
           {subOptions.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="subcategory" className="text-[13px] font-medium text-[var(--color-muted)]">
-                Sub-category (optional)
+                {t('Sub-category (optional)')}
               </label>
               <select
                 id="subcategory"
@@ -247,7 +248,7 @@ function TransactionForm({
                 onChange={(e) => setSubCategoryId(e.target.value)}
                 className={selectClass}
               >
-                <option value="">None</option>
+                <option value="">{t('None')}</option>
                 {subOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -260,7 +261,7 @@ function TransactionForm({
           {accounts.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="account" className="text-[13px] font-medium text-[var(--color-muted)]">
-                Account (optional)
+                {t('Account (optional)')}
               </label>
               <select
                 id="account"
@@ -268,7 +269,7 @@ function TransactionForm({
                 onChange={(e) => setAccountId(e.target.value)}
                 className={selectClass}
               >
-                <option value="">None</option>
+                <option value="">{t('None')}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -281,7 +282,7 @@ function TransactionForm({
 
           {labels.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-[13px] font-medium text-[var(--color-muted)]">Labels</span>
+              <span className="text-[13px] font-medium text-[var(--color-muted)]">{t('Labels')}</span>
               <div className="flex flex-wrap gap-2">
                 {labels.map((l) => {
                   const active = selectedLabelIds.includes(l.id)
@@ -307,7 +308,7 @@ function TransactionForm({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="datetime" className="text-[13px] font-medium text-[var(--color-muted)]">
-              Date &amp; time
+              {t('Date & time')}
             </label>
             <input
               id="datetime"
@@ -317,32 +318,32 @@ function TransactionForm({
               className={selectClass}
             />
             <span className="text-xs text-[var(--color-muted)]">
-              Saved with your timezone · {timezone}
+              {t('Saved with your timezone · {timezone}', { timezone })}
             </span>
           </div>
 
           <Input
             id="note"
-            label="Note (optional)"
+            label={t('Note (optional)')}
             type="text"
-            placeholder="e.g. Lunch with team"
+            placeholder={t('e.g. Lunch with team')}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add transaction'}
+              {saving ? t('Saving…') : isEdit ? t('Save changes') : t('Add transaction')}
             </Button>
           </div>
 
           {isEdit && (
             <DeleteButton
               variant="block"
-              label="Delete transaction"
+              label={t('Delete transaction')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -358,7 +359,7 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
   const positive = tx.type === 'income'
   const categoryLabel = tx.subCategory
     ? `${cat?.name ?? ''} · ${tx.subCategory.name}`
-    : (cat?.name ?? 'Uncategorized')
+    : (cat?.name ?? t('Uncategorized'))
   return (
     <button
       type="button"
@@ -378,7 +379,7 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
             <Repeat
               size={12}
               className="shrink-0 text-[var(--color-muted)]"
-              aria-label="Recurring"
+              aria-label={t('Recurring')}
             />
           )}
         </p>
@@ -417,9 +418,9 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
 }
 
 const TYPE_TABS = [
-  { value: '', label: 'All' },
-  { value: 'income', label: 'Income' },
-  { value: 'expense', label: 'Expense' },
+  { value: '', label: t('All') },
+  { value: 'income', label: t('Income') },
+  { value: 'expense', label: t('Expense') },
 ] as const
 
 /** Local midnight of a 'YYYY-MM-DD' date, shifted by `addDays`, as an ISO instant. */
@@ -532,7 +533,7 @@ export function Transactions() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load transactions.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load transactions.')),
       )
     return () => {
       active = false
@@ -566,7 +567,7 @@ export function Transactions() {
       setNextCursor(page.nextCursor)
     } catch (err) {
       if (shownFilters.current !== requested) return
-      setError(err instanceof ApiError ? err.message : 'Could not load more.')
+      setError(err instanceof ApiError ? err.message : t('Could not load more.'))
     } finally {
       setLoadingMore(false)
     }
@@ -599,7 +600,7 @@ export function Transactions() {
   function handleDelete(tx: Transaction) {
     closeForm()
     undoable.remove({
-      message: 'Transaction deleted',
+      message: t('Transaction deleted'),
       hide: () => setItems((prev) => (prev ?? []).filter((t) => t.id !== tx.id)),
       restore: () =>
         setItems((prev) =>
@@ -616,7 +617,7 @@ export function Transactions() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Transactions"
+        title={t('Transactions')}
         action={
           <Button
             size="sm"
@@ -630,13 +631,13 @@ export function Transactions() {
             }}
           >
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
 
       {formOpen && (
-        <Sheet label={editing ? 'Edit transaction' : 'New transaction'} onClose={closeForm}>
+        <Sheet label={editing ? t('Edit transaction') : t('New transaction')} onClose={closeForm}>
           <TransactionForm
             key={editing?.id ?? 'new'}
             initial={editing ?? undefined}
@@ -659,8 +660,8 @@ export function Transactions() {
             />
             <input
               type="search"
-              aria-label="Search notes"
-              placeholder="Search notes"
+              aria-label={t('Search notes')}
+              placeholder={t('Search notes')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className={selectClass + ' pl-9'}
@@ -678,12 +679,12 @@ export function Transactions() {
             }
           >
             <SlidersHorizontal size={16} aria-hidden />
-            Filters
+            {t('Filters')}
             {panelFilterCount > 0 && <span className="tnum">({panelFilterCount})</span>}
           </button>
         </div>
 
-        <div className="flex gap-2" role="group" aria-label="Transaction type">
+        <div className="flex gap-2" role="group" aria-label={t('Transaction type')}>
           {TYPE_TABS.map((tab) => (
             <button
               key={tab.label}
@@ -707,7 +708,7 @@ export function Transactions() {
             <CardBody className="grid grid-cols-2 gap-3">
               <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
                 <label htmlFor="filter-account" className="text-[13px] font-medium text-[var(--color-muted)]">
-                  In account
+                  {t('In account')}
                 </label>
                 <select
                   id="filter-account"
@@ -715,7 +716,7 @@ export function Transactions() {
                   onChange={(e) => setParam('account', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="">Any</option>
+                  <option value="">{t('Any')}</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -725,7 +726,7 @@ export function Transactions() {
               </div>
               <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
                 <label htmlFor="filter-category" className="text-[13px] font-medium text-[var(--color-muted)]">
-                  In category
+                  {t('In category')}
                 </label>
                 <select
                   id="filter-category"
@@ -733,10 +734,10 @@ export function Transactions() {
                   onChange={(e) => setParam('category', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="">Any</option>
+                  <option value="">{t('Any')}</option>
                   {topLevelCategories.map((c) => (
                     <optgroup key={c.id} label={c.name}>
-                      <option value={c.id}>All {c.name}</option>
+                      <option value={c.id}>{t('All {name}', { name: c.name })}</option>
                       {categories
                         .filter((sub) => sub.parentId === c.id)
                         .map((sub) => (
@@ -750,7 +751,7 @@ export function Transactions() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="filter-from" className="text-[13px] font-medium text-[var(--color-muted)]">
-                  From
+                  {t('From')}
                 </label>
                 <input
                   id="filter-from"
@@ -763,7 +764,7 @@ export function Transactions() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="filter-to" className="text-[13px] font-medium text-[var(--color-muted)]">
-                  To
+                  {t('To')}
                 </label>
                 <input
                   id="filter-to"
@@ -792,7 +793,7 @@ export function Transactions() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -802,8 +803,8 @@ export function Transactions() {
           <CardBody className="space-y-2">
             <p className="text-sm text-[var(--color-muted)]">
               {isFiltered
-                ? 'No transactions match these filters.'
-                : 'No transactions yet. Add your first one.'}
+                ? t('No transactions match these filters.')
+                : t('No transactions yet. Add your first one.')}
             </p>
             {isFiltered && (
               <button
@@ -811,7 +812,7 @@ export function Transactions() {
                 onClick={clearFilters}
                 className="text-sm font-medium text-brand-600 hover:text-brand-700"
               >
-                Clear filters
+                {t('Clear filters')}
               </button>
             )}
           </CardBody>
@@ -849,7 +850,7 @@ export function Transactions() {
           onClick={loadMore}
           disabled={loadingMore}
         >
-          {loadingMore ? 'Loading…' : 'Load more'}
+          {loadingMore ? t('Loading…') : t('Load more')}
         </Button>
       )}
     </div>

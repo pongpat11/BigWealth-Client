@@ -20,6 +20,7 @@ import {
 } from '@/lib/budgets'
 import { listCategories, type Category } from '@/lib/categories'
 import { formatMonth, formatTHB, monthKey, shiftMonth } from '@/lib/format'
+import { t } from '@/lib/i18n'
 
 const FALLBACK_COLOR = '#94a3b8'
 const selectClass =
@@ -60,11 +61,11 @@ function BudgetForm({
     e.preventDefault()
     const value = Number(limit)
     if (!initial && !categoryId) {
-      setError('Pick a category.')
+      setError(t('Pick a category.'))
       return
     }
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Enter a limit greater than 0.')
+      setError(t('Enter a limit greater than 0.'))
       return
     }
     setError(null)
@@ -75,7 +76,7 @@ function BudgetForm({
         : await createBudget({ categoryId, limit: value }, month)
       onSaved(saved)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -85,7 +86,7 @@ function BudgetForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {initial ? `Edit budget — ${initial.category.name}` : 'New budget'}
+            {initial ? t('Edit budget — {name}', { name: initial.category.name }) : t('New budget')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -99,7 +100,7 @@ function BudgetForm({
                 htmlFor="budget-category"
                 className="text-[13px] font-medium text-[var(--color-muted)]"
               >
-                Category
+                {t('Category')}
               </label>
               <select
                 id="budget-category"
@@ -107,7 +108,7 @@ function BudgetForm({
                 onChange={(e) => setCategoryId(e.target.value)}
                 className={selectClass}
               >
-                <option value="">Select…</option>
+                <option value="">{t('Select…')}</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -119,7 +120,7 @@ function BudgetForm({
 
           <Input
             id="budget-limit"
-            label="Monthly limit (฿)"
+            label={t('Monthly limit (฿)')}
             type="number"
             inputMode="decimal"
             min="0"
@@ -131,17 +132,17 @@ function BudgetForm({
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : initial ? 'Save changes' : 'Add budget'}
+              {saving ? t('Saving…') : initial ? t('Save changes') : t('Add budget')}
             </Button>
           </div>
 
           {initial && (
             <DeleteButton
               variant="block"
-              label="Remove budget"
+              label={t('Remove budget')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -160,7 +161,7 @@ function BudgetRow({ budget, onEdit }: { budget: Budget; onEdit: (b: Budget) => 
     <button
       type="button"
       onClick={() => onEdit(budget)}
-      aria-label={`Edit ${budget.category.name} budget`}
+      aria-label={t('Edit {name} budget', { name: budget.category.name })}
       className="flex w-full items-center gap-3 py-3.5 text-left transition-colors hover:bg-[var(--color-canvas)]"
     >
       <span
@@ -216,7 +217,7 @@ export function Budgets() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load budgets.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load budgets.')),
       )
     return () => {
       active = false
@@ -263,7 +264,7 @@ export function Budgets() {
     const setItems = (fn: (items: Budget[]) => Budget[]) =>
       setOverview((o) => (o ? { ...o, items: fn(o.items) } : o))
     undoable.remove({
-      message: `Removed ${budget.category.name} budget`,
+      message: t('Removed {name} budget', { name: budget.category.name }),
       hide: () => setItems((items) => items.filter((b) => b.id !== budget.id)),
       restore: () => setItems((items) => reinsert(items, budget, index)),
       commit: () => deleteBudget(budget.id),
@@ -277,7 +278,7 @@ export function Budgets() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Budgets"
+        title={t('Budgets')}
         action={
           <Button
             size="sm"
@@ -291,7 +292,7 @@ export function Budgets() {
             }}
           >
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
@@ -300,7 +301,7 @@ export function Budgets() {
       <div className="flex items-center justify-between rounded-2xl border border-[var(--color-line)] bg-[var(--color-surface)] px-2 py-1.5">
         <button
           type="button"
-          aria-label="Previous month"
+          aria-label={t('Previous month')}
           onClick={() => changeMonth(-1)}
           className="flex size-9 items-center justify-center rounded-xl text-[var(--color-muted)] hover:bg-[var(--color-canvas)]"
         >
@@ -311,7 +312,7 @@ export function Budgets() {
         </p>
         <button
           type="button"
-          aria-label="Next month"
+          aria-label={t('Next month')}
           onClick={() => changeMonth(1)}
           className="flex size-9 items-center justify-center rounded-xl text-[var(--color-muted)] hover:bg-[var(--color-canvas)]"
         >
@@ -320,7 +321,7 @@ export function Budgets() {
       </div>
 
       {formOpen && (
-        <Sheet label={editing ? 'Edit budget' : 'New budget'} onClose={closeForm}>
+        <Sheet label={editing ? t('Edit budget') : t('New budget')} onClose={closeForm}>
           <BudgetForm
             key={editing?.id ?? 'new'}
             initial={editing ?? undefined}
@@ -347,7 +348,7 @@ export function Budgets() {
       {!error && overview === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -359,7 +360,7 @@ export function Budgets() {
               <Wallet size={22} aria-hidden />
             </span>
             <p className="text-sm text-[var(--color-muted)]">
-              No budgets yet. Set a monthly limit for a category to track your spending.
+              {t('No budgets yet. Set a monthly limit for a category to track your spending.')}
             </p>
           </CardBody>
         </Card>
@@ -370,7 +371,7 @@ export function Budgets() {
           <Card>
             <CardBody className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-                Spent this month
+                {t('Spent this month')}
               </p>
               <p className="tnum text-[22px] font-bold text-[var(--color-ink)]">
                 {formatTHB(overview.totalSpent)}{' '}

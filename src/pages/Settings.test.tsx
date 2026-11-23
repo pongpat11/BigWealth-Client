@@ -1,9 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Settings } from './Settings'
 import * as auth from '@/lib/auth'
+import { reloadPage } from '@/lib/i18n'
+
+vi.mock('@/lib/i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/i18n')>()),
+  reloadPage: vi.fn(),
+}))
 
 vi.mock('@/lib/auth', () => ({
   me: vi.fn(),
@@ -73,6 +79,24 @@ describe('Settings page', () => {
 
     await u.click(screen.getByRole('button', { name: 'Light' }))
     expect(document.documentElement).not.toHaveClass('dark')
+  })
+
+  it('switches the language and reloads to apply it', async () => {
+    const u = userEvent.setup()
+    renderPage()
+    await screen.findByText('me@example.com')
+    const language = screen.getByRole('group', { name: 'Language' })
+    // Defaults to following the device, like the theme.
+    expect(within(language).getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'true')
+
+    await u.click(within(language).getByRole('button', { name: 'ไทย' }))
+    expect(localStorage.getItem('bw.language')).toBe('th')
+    expect(reloadPage).toHaveBeenCalledTimes(1)
+
+    // Back to the language already showing: nothing to reload.
+    await u.click(within(language).getByRole('button', { name: 'English' }))
+    expect(localStorage.getItem('bw.language')).toBe('en')
+    expect(reloadPage).toHaveBeenCalledTimes(1)
   })
 
   it('rejects mismatched or too-short new passwords without calling the API', async () => {

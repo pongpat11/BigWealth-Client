@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
+import { t } from '@/lib/i18n'
 import {
   createLabel,
   deleteLabel,
@@ -32,7 +33,7 @@ function NewLabelForm({
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     setError(null)
@@ -41,7 +42,7 @@ function NewLabelForm({
       const created = await createLabel({ name: name.trim() })
       onSaved(created)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -50,7 +51,7 @@ function NewLabelForm({
     <Card>
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">New label</p>
+          <p className="text-sm font-semibold text-[var(--color-ink)]">{t('New label')}</p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
@@ -58,18 +59,18 @@ function NewLabelForm({
           )}
           <Input
             id="new-label-name"
-            label="Name"
-            placeholder="e.g. Vacation"
+            label={t('Name')}
+            placeholder={t('e.g. Vacation')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : 'Add label'}
+              {saving ? t('Saving…') : t('Add label')}
             </Button>
           </div>
         </form>
@@ -102,7 +103,7 @@ function LabelRow({
       onChanged(updated)
       setRenaming(false)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not rename.')
+      setError(err instanceof ApiError ? err.message : t('Could not rename.'))
     }
   }
 
@@ -130,7 +131,7 @@ function LabelRow({
           )}
         </div>
         {label.isDefault ? (
-          <Badge tone="neutral">Default</Badge>
+          <Badge tone="neutral">{t('Default')}</Badge>
         ) : (
           <div className="flex shrink-0 items-center gap-1">
             <button
@@ -138,10 +139,10 @@ function LabelRow({
               onClick={() => setRenaming((v) => !v)}
               className="h-9 rounded-xl px-2 text-xs font-medium text-brand-600 hover:bg-[var(--color-canvas)]"
             >
-              Rename
+              {t('Rename')}
             </button>
             <DeleteButton
-              label={`Delete ${label.name}`}
+              label={t('Delete {name}', { name: label.name })}
               onClick={() => onDelete(label)}
               className="-mr-2"
             />
@@ -164,7 +165,7 @@ export function Labels() {
       .then((rows) => active && setItems(rows))
       .catch(
         (err) =>
-          active && setError(err instanceof ApiError ? err.message : 'Could not load labels.'),
+          active && setError(err instanceof ApiError ? err.message : t('Could not load labels.')),
       )
     return () => {
       active = false
@@ -184,7 +185,7 @@ export function Labels() {
   function handleDelete(label: Label) {
     const index = (items ?? []).findIndex((l) => l.id === label.id)
     undoable.remove({
-      message: `Deleted “${label.name}”`,
+      message: t('Deleted “{name}”', { name: label.name }),
       hide: () => setItems((prev) => (prev ?? []).filter((l) => l.id !== label.id)),
       restore: () => setItems((prev) => reinsert(prev ?? [], label, index)),
       commit: () => deleteLabel(label.id),
@@ -197,12 +198,12 @@ export function Labels() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Labels"
-        subtitle="Defaults are built-in · add your own"
+        title={t('Labels')}
+        subtitle={t('Defaults are built-in · add your own')}
         action={
           <Button size="sm" onClick={() => setAddingLabel((v) => !v)}>
             <Plus size={16} aria-hidden />
-            New
+            {t('New')}
           </Button>
         }
       />
@@ -231,7 +232,7 @@ export function Labels() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -241,7 +242,7 @@ export function Labels() {
           {defaults.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                Defaults
+                {t('Defaults')}
               </p>
               <Card>
                 <CardBody className="divide-y divide-[var(--color-line)] py-0">
@@ -255,12 +256,12 @@ export function Labels() {
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-              Your labels
+              {t('Your labels')}
             </p>
             {custom.length === 0 ? (
               <Card>
                 <CardBody>
-                  <p className="text-sm text-[var(--color-muted)]">No custom labels yet.</p>
+                  <p className="text-sm text-[var(--color-muted)]">{t('No custom labels yet.')}</p>
                 </CardBody>
               </Card>
             ) : (

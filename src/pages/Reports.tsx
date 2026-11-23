@@ -15,6 +15,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ApiError } from '@/lib/api'
 import { formatSignedTHB, formatTHB } from '@/lib/format'
+import { dateLocale, t } from '@/lib/i18n'
 import {
   getReport,
   REPORT_RANGES,
@@ -25,21 +26,28 @@ import {
 
 const FALLBACK_COLOR = '#94a3b8'
 const RANGE_LABELS: Record<ReportRange, string> = {
-  '1M': 'This month',
-  '3M': 'Last 3 months',
-  YTD: 'Year to date',
-  '1Y': 'Last 12 months',
+  '1M': t('This month'),
+  '3M': t('Last 3 months'),
+  YTD: t('Year to date'),
+  '1Y': t('Last 12 months'),
+}
+const RANGE_CHIPS: Record<ReportRange, string> = {
+  '1M': t('1M'),
+  '3M': t('3M'),
+  YTD: t('YTD'),
+  '1Y': t('1Y'),
 }
 
 /** 'YYYY-MM' → 'Jul' (or "Jul '25" when the range spans years). */
 function monthLabel(month: string, withYear: boolean): string {
   const [year, m] = month.split('-').map(Number)
-  const name = new Date(year, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' })
+  const name = new Date(year, m - 1, 1).toLocaleDateString(dateLocale(), { month: 'short' })
   return withYear ? `${name} '${String(year).slice(2)}` : name
 }
 
 function downloadCsv(report: Report) {
-  const blob = new Blob([reportToCsv(report)], { type: 'text/csv;charset=utf-8' })
+  // The BOM makes Excel read the file as UTF-8, so Thai headers aren't garbled.
+  const blob = new Blob(['\ufeff' + reportToCsv(report)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -84,7 +92,7 @@ export function Reports() {
       })
       .catch(
         (err) =>
-          active && setError(err instanceof ApiError ? err.message : 'Could not load the report.'),
+          active && setError(err instanceof ApiError ? err.message : t('Could not load the report.')),
       )
     return () => {
       active = false
@@ -108,9 +116,9 @@ export function Reports() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Reports" subtitle={RANGE_LABELS[range]} />
+      <PageHeader title={t('Reports')} subtitle={RANGE_LABELS[range]} />
 
-      <div className="flex gap-2" role="group" aria-label="Report range">
+      <div className="flex gap-2" role="group" aria-label={t('Report range')}>
         {REPORT_RANGES.map((r) => (
           <button
             key={r}
@@ -125,7 +133,7 @@ export function Reports() {
                 : 'border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
             }
           >
-            {r}
+            {RANGE_CHIPS[r]}
           </button>
         ))}
       </div>
@@ -143,7 +151,7 @@ export function Reports() {
       {!error && report === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -152,16 +160,16 @@ export function Reports() {
         <>
           <Card>
             <CardBody className="grid grid-cols-3 gap-3">
-              <Stat label="Income" value={formatTHB(report.totalIncome)} tone="gain" />
-              <Stat label="Expense" value={formatTHB(report.totalExpense)} tone="loss" />
-              <Stat label="Net" value={formatSignedTHB(net)} tone={net >= 0 ? 'gain' : 'loss'} />
+              <Stat label={t('Income')} value={formatTHB(report.totalIncome)} tone="gain" />
+              <Stat label={t('Expense')} value={formatTHB(report.totalExpense)} tone="loss" />
+              <Stat label={t('Net')} value={formatSignedTHB(net)} tone={net >= 0 ? 'gain' : 'loss'} />
             </CardBody>
           </Card>
 
           {/* Net worth trend */}
           <Card>
             <CardHeader
-              title="Net worth"
+              title={t('Net worth')}
               action={
                 netWorthChange !== null && (
                   <span
@@ -214,8 +222,7 @@ export function Reports() {
                 </div>
               )}
               <p className="text-xs text-[var(--color-muted)]">
-                Month-end figures, worked back from today's balances using your recorded
-                transactions.
+                {t("Month-end figures, worked back from today's balances using your recorded transactions.")}
               </p>
             </CardBody>
           </Card>
@@ -227,7 +234,7 @@ export function Reports() {
                   <BarChart3 size={22} aria-hidden />
                 </span>
                 <p className="text-sm text-[var(--color-muted)]">
-                  No income or spending recorded in this period.
+                  {t('No income or spending recorded in this period.')}
                 </p>
               </CardBody>
             </Card>
@@ -236,7 +243,7 @@ export function Reports() {
           {/* Spending by category */}
           {report.spendingByCategory.length > 0 && (
             <Card>
-              <CardHeader title="Spending by category" />
+              <CardHeader title={t('Spending by category')} />
               <CardBody>
                 <ul className="space-y-3">
                   {report.spendingByCategory.map((c) => {
@@ -275,7 +282,7 @@ export function Reports() {
           {/* Income vs expense per month */}
           {hasActivity && (
             <Card>
-              <CardHeader title="Income vs expense" />
+              <CardHeader title={t('Income vs expense')} />
               <CardBody>
                 <div className="h-44" aria-hidden>
                   <ResponsiveContainer width="100%" height="100%">
@@ -297,12 +304,12 @@ export function Reports() {
                 </div>
                 {/* Text alternative to the chart. */}
                 <table className="sr-only">
-                  <caption>Income and expense by month</caption>
+                  <caption>{t('Income and expense by month')}</caption>
                   <thead>
                     <tr>
-                      <th>Month</th>
-                      <th>Income</th>
-                      <th>Expense</th>
+                      <th>{t('Month')}</th>
+                      <th>{t('Income')}</th>
+                      <th>{t('Expense')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -321,7 +328,7 @@ export function Reports() {
 
           <Button variant="secondary" className="w-full" onClick={() => downloadCsv(report)}>
             <Download size={16} aria-hidden />
-            Export CSV
+            {t('Export CSV')}
           </Button>
         </>
       )}

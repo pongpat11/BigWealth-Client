@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 // Reports API client — trends over a range of whole calendar months.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
@@ -46,10 +47,10 @@ function csvField(value: string | number): string {
 /** The report as CSV: a monthly table, then spending by category. */
 export function reportToCsv(report: Report): string {
   const rows: (string | number)[][] = [
-    ['Month', 'Income (THB)', 'Expense (THB)', 'Net (THB)', 'Net worth (THB)'],
+    [t('Month'), t('Income (THB)'), t('Expense (THB)'), t('Net (THB)'), t('Net worth (THB)')],
     ...report.months.map((m) => [m.month, m.income, m.expense, m.income - m.expense, m.netWorth]),
     [],
-    ['Category', 'Spent (THB)'],
+    [t('Category'), t('Spent (THB)')],
     ...report.spendingByCategory.map((c) => [c.name, c.amount]),
   ]
   return rows.map((row) => row.map(csvField).join(',')).join('\n')

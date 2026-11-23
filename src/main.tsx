@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
+import { initLanguage } from './lib/i18n'
 import { initTheme } from './lib/theme'
 
 // Before first paint, so a dark-mode user never sees a light flash.
 initTheme()
+initLanguage()
 
 // Production only: in dev a service worker would cache stale modules.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

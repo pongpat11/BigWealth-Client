@@ -14,16 +14,17 @@ import {
 import { Card, CardBody } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { logout } from '@/lib/auth'
+import { t } from '@/lib/i18n'
 
 const items = [
-  { to: '/recurring', label: 'Recurring', icon: Repeat },
-  { to: '/goals', label: 'Savings Goals', icon: Target },
-  { to: '/debts', label: 'Debts', icon: CreditCard },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
-  { to: '/accounts', label: 'Accounts', icon: Landmark },
-  { to: '/categories', label: 'Categories', icon: Tag },
-  { to: '/labels', label: 'Labels', icon: Tags },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/recurring', label: t('Recurring'), icon: Repeat },
+  { to: '/goals', label: t('Savings Goals'), icon: Target },
+  { to: '/debts', label: t('Debts'), icon: CreditCard },
+  { to: '/reports', label: t('Reports'), icon: BarChart3 },
+  { to: '/accounts', label: t('Accounts'), icon: Landmark },
+  { to: '/categories', label: t('Categories'), icon: Tag },
+  { to: '/labels', label: t('Labels'), icon: Tags },
+  { to: '/settings', label: t('Settings'), icon: Settings },
 ] as const
 
 /** Mobile hub for secondary screens (desktop shows them in the sidebar). */
@@ -37,7 +38,7 @@ export function More() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="More" />
+      <PageHeader title={t('More')} />
       <Card>
         <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
           {items.map(({ to, label, icon: IconCmp }) => (
@@ -70,7 +71,7 @@ export function More() {
             <span className="flex size-9 items-center justify-center rounded-full bg-rose-500/10 text-[var(--color-loss)]">
               <LogOut size={16} aria-hidden />
             </span>
-            <span className="flex-1 text-left">Log out</span>
+            <span className="flex-1 text-left">{t('Log out')}</span>
           </button>
         </CardBody>
       </Card>

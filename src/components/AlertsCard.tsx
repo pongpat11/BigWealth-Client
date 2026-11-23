@@ -7,6 +7,7 @@ import { getBudgets } from '@/lib/budgets'
 import { listGoals } from '@/lib/goals'
 import { listRecurring } from '@/lib/recurring'
 import { monthKey } from '@/lib/format'
+import { t } from '@/lib/i18n'
 
 const TONE_STYLE: Record<AlertTone, string> = {
   danger: 'bg-rose-500/10 text-[var(--color-loss)]',
@@ -44,7 +45,7 @@ export function AlertsCard() {
 
   return (
     <Card>
-      <CardHeader title="Heads up" />
+      <CardHeader title={t('Heads up')} />
       <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
         {alerts.map((a) => {
           const IconCmp = a.tone === 'info' ? CalendarClock : TriangleAlert

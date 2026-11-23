@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 // Portfolio API client: investment holdings and dividends. Prices are entered
 // by hand, or kept current by the server for SET, US and crypto holdings with
 // autoPrice on. The server converts USD to THB with a daily reference rate.
@@ -13,12 +14,12 @@ export const AUTO_PRICE_CLASSES: readonly AssetClass[] = ['set', 'us', 'crypto',
 
 /** Labels and chart colours (DESIGN_SPEC §3 categorical palette). */
 export const ASSET_CLASS_META: Record<AssetClass, { label: string; color: string }> = {
-  set: { label: 'Thai Stocks', color: '#059669' },
-  us: { label: 'US Stocks', color: '#6366f1' },
-  fund: { label: 'Funds', color: '#0ea5e9' },
-  crypto: { label: 'Crypto', color: '#f59e0b' },
-  gold: { label: 'Gold', color: '#fbbf24' },
-  cash: { label: 'Cash', color: '#94a3b8' },
+  set: { label: t('Thai Stocks'), color: '#059669' },
+  us: { label: t('US Stocks'), color: '#6366f1' },
+  fund: { label: t('Funds'), color: '#0ea5e9' },
+  crypto: { label: t('Crypto'), color: '#f59e0b' },
+  gold: { label: t('Gold'), color: '#fbbf24' },
+  cash: { label: t('Cash'), color: '#94a3b8' },
 }
 
 export interface Fx {
