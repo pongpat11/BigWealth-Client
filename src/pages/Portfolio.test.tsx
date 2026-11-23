@@ -239,6 +239,10 @@ describe('Portfolio page', () => {
   })
 
   it('updates a price from the edit form', async () => {
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      holdings: [{ ...ptt, accountId: 'settrade' }, voo],
+    })
     vi.mocked(api.updateHolding).mockResolvedValue(ptt)
     const user = userEvent.setup()
     renderPage()
@@ -252,6 +256,41 @@ describe('Portfolio page', () => {
     await waitFor(() =>
       expect(api.updateHolding).toHaveBeenCalledWith('ptt', expect.objectContaining({ price: 40 })),
     )
+  })
+
+  it('never assigns an unassigned holding to the only account on its own', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /edit holding ptt/i }))
+    expect(screen.getByLabelText('Account')).toHaveValue('')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/choose the account that holds it/i)
+    expect(api.updateHolding).not.toHaveBeenCalled()
+  })
+
+  it('still saves edits when accounts fail to load, and offers a retry', async () => {
+    vi.mocked(accountsApi.listAccounts).mockRejectedValue(new Error('offline'))
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      holdings: [{ ...ptt, accountId: 'settrade' }, voo],
+    })
+    vi.mocked(api.updateHolding).mockResolvedValue(ptt)
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: /try again/i })).toBeInTheDocument()
+    // The account name isn't known, but it isn't flagged as missing either.
+    const thai = screen.getByRole('region', { name: 'Thai Stocks' })
+    expect(within(thai).queryByText('No account')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /edit holding ptt/i }))
+    const price = screen.getByLabelText(/current price/i)
+    await user.clear(price)
+    await user.type(price, '40')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(api.updateHolding).toHaveBeenCalled())
+    expect(vi.mocked(api.updateHolding).mock.calls[0][1]).not.toHaveProperty('accountId')
   })
 
   it('keeps the holdings sort when switching tabs', async () => {

@@ -106,24 +106,42 @@ function accountLabel(a: Account): string {
   return a.institution ? `${a.name} · ${a.institution}` : a.name
 }
 
-/** The account a new holding or dividend goes into before the user picks one. */
-function startingAccount(accounts: Account[], preferred?: string | null): string {
+/**
+ * The account a holding or dividend goes into before the user picks one.
+ * `onlyAccount` falls back to the single account when there is no preference.
+ */
+function startingAccount(
+  accounts: Account[] | null,
+  preferred?: string | null,
+  onlyAccount = true,
+): string {
+  if (!accounts) return ''
   if (preferred && accounts.some((a) => a.id === preferred)) return preferred
-  return accounts.length === 1 ? accounts[0].id : ''
+  return onlyAccount && accounts.length === 1 ? accounts[0].id : ''
 }
 
 /** Required investment-account select, or a link to create one when there is none. */
 function AccountField({
   id,
   accounts,
+  failed,
   value,
   onChange,
 }: {
   id: string
-  accounts: Account[]
+  /** null while loading or when loading failed. */
+  accounts: Account[] | null
+  failed: boolean
   value: string
   onChange: (id: string) => void
 }) {
+  if (accounts === null) {
+    return (
+      <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
+        {failed ? t('Could not load accounts.') : t('Loading…')}
+      </p>
+    )
+  }
   if (accounts.length === 0) {
     return (
       <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
@@ -154,23 +172,30 @@ function AccountField({
 function HoldingForm({
   initial,
   accounts,
+  accountsFailed,
   defaultAccountId,
   onDone,
   onDelete,
   onClose,
 }: {
   initial?: Holding
-  /** The user's investment accounts. */
-  accounts: Account[]
+  /** The user's investment accounts; null while loading or after a failed load. */
+  accounts: Account[] | null
+  accountsFailed: boolean
   /** Account picked in the page filter, used for new holdings. */
   defaultAccountId?: string
   onDone: () => void
   onDelete: () => void
   onClose: () => void
 }) {
-  const [accountId, setAccountId] = useState(() =>
-    startingAccount(accounts, initial ? initial.accountId : defaultAccountId),
-  )
+  // Derived until the user picks, so it follows accounts that load later.
+  // An existing holding without an account is never assigned silently.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
+  const accountId =
+    pickedAccount ??
+    (initial
+      ? startingAccount(accounts, initial.accountId, false)
+      : startingAccount(accounts, defaultAccountId))
   const [symbol, setSymbol] = useState(initial?.symbol ?? '')
   const [name, setName] = useState(initial?.name ?? '')
   const [assetClass, setAssetClass] = useState<AssetClass>(initial?.assetClass ?? 'set')
@@ -190,7 +215,10 @@ function HoldingForm({
     const qty = Number(quantity)
     const cost = Number(avgCost)
     const current = Number(price)
-    if (!accountId) return setError(t('Choose the account that holds it.'))
+    // Edits still save when accounts can't be loaded; the account is then left as it is.
+    if (!accountId && !(initial && accounts === null)) {
+      return setError(t('Choose the account that holds it.'))
+    }
     if (!symbol.trim()) return setError(t('Enter a symbol.'))
     if (!Number.isFinite(qty) || qty <= 0) return setError(t('Enter a quantity greater than 0.'))
     if (avgCost.trim() === '' || !Number.isFinite(cost) || cost < 0) {
@@ -211,7 +239,7 @@ function HoldingForm({
       avgCost: cost,
       ...(priceGiven && { price: current }),
       autoPrice: followsMarket,
-      accountId,
+      ...(accountId && { accountId }),
     }
     try {
       if (initial) await updateHolding(initial.id, input)
@@ -231,7 +259,13 @@ function HoldingForm({
             {initial ? t('Edit {name}', { name: initial.symbol }) : t('New holding')}
           </p>
           {error && <Message>{error}</Message>}
-          <AccountField id="holding-account" accounts={accounts} value={accountId} onChange={setAccountId} />
+          <AccountField
+            id="holding-account"
+            accounts={accounts}
+            failed={accountsFailed}
+            value={accountId}
+            onChange={setPickedAccount}
+          />
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="holding-symbol"
@@ -373,7 +407,10 @@ function HoldingRow({
   onEdit,
 }: {
   holding: Holding
-  /** Account name to show; undefined hides the chip (e.g. when filtered to one account). */
+  /**
+   * Account name to show; null flags a holding with no account; undefined or
+   * '' (name not loaded) shows nothing.
+   */
   account?: string | null
   onEdit: (h: Holding) => void
 }) {
@@ -395,16 +432,17 @@ function HoldingRow({
           {quantityText(holding.quantity)} · {native(holding.price, holding.currency)}
           {holding.autoPrice && ` · ${priceAge(holding.priceUpdatedAt)}`}
         </p>
-        {account !== undefined &&
-          (account ? (
-            <span className="mt-1 inline-block max-w-full truncate rounded-full bg-[var(--color-canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-muted)]">
-              {account}
-            </span>
-          ) : (
+        {account ? (
+          <span className="mt-1 inline-block max-w-full truncate rounded-full bg-[var(--color-canvas)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-muted)]">
+            {account}
+          </span>
+        ) : (
+          account === null && (
             <span className="mt-1 inline-block rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-600">
               {t('No account')}
             </span>
-          ))}
+          )
+        )}
       </div>
       <div className="shrink-0 text-right">
         <p className="tnum text-sm font-semibold text-[var(--color-ink)]">
@@ -541,7 +579,7 @@ function HoldingsTab({
                   <HoldingRow
                     key={h.id}
                     holding={h}
-                    account={accountNames && (h.accountId ? (accountNames.get(h.accountId) ?? null) : null)}
+                    account={accountNames && (h.accountId ? (accountNames.get(h.accountId) ?? '') : null)}
                     onEdit={onEdit}
                   />
                 ))}
@@ -556,12 +594,14 @@ function HoldingsTab({
 
 function DividendForm({
   accounts,
+  accountsFailed,
   holdings,
   defaultAccountId,
   onDone,
   onClose,
 }: {
-  accounts: Account[]
+  accounts: Account[] | null
+  accountsFailed: boolean
   /** Used to prefill the account from a holding with the same symbol. */
   holdings: Holding[]
   defaultAccountId?: string
@@ -569,16 +609,16 @@ function DividendForm({
   onClose: () => void
 }) {
   const [symbol, setSymbol] = useState('')
-  const [accountId, setAccountId] = useState(() => startingAccount(accounts, defaultAccountId))
-  // Once the user picks an account, typing a symbol no longer changes it.
-  const [accountTouched, setAccountTouched] = useState(false)
-
-  function changeSymbol(next: string) {
-    setSymbol(next)
-    if (accountTouched) return
-    const held = holdings.find((h) => h.symbol === next.trim().toUpperCase() && h.accountId)
-    if (held?.accountId && accounts.some((a) => a.id === held.accountId)) setAccountId(held.accountId)
-  }
+  // Until the user picks one, the account follows the symbol (the account of a
+  // holding with that symbol), else the page filter or the only account.
+  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
+  const heldIn = holdings.find(
+    (h) =>
+      h.symbol === symbol.trim().toUpperCase() &&
+      h.accountId &&
+      accounts?.some((a) => a.id === h.accountId),
+  )?.accountId
+  const accountId = pickedAccount ?? heldIn ?? startingAccount(accounts, defaultAccountId)
   const [payDate, setPayDate] = useState(() => new Date().toLocaleDateString('en-CA'))
   const [currency, setCurrency] = useState<Currency>('THB')
   const [gross, setGross] = useState('')
@@ -626,11 +666,9 @@ function DividendForm({
           <AccountField
             id="dividend-account"
             accounts={accounts}
+            failed={accountsFailed}
             value={accountId}
-            onChange={(id) => {
-              setAccountTouched(true)
-              setAccountId(id)
-            }}
+            onChange={setPickedAccount}
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
@@ -638,7 +676,7 @@ function DividendForm({
               label={t('Symbol')}
               placeholder={t('e.g. PTT')}
               value={symbol}
-              onChange={(e) => changeSymbol(e.target.value)}
+              onChange={(e) => setSymbol(e.target.value)}
             />
             <Input
               id="dividend-date"
@@ -901,16 +939,21 @@ export function Portfolio() {
   // `?account=<id>` (or `none`) narrows the page to one account.
   const [params, setParams] = useSearchParams()
   const accountFilter = params.get('account') ?? ''
-  const [accounts, setAccounts] = useState<Account[]>([])
-  // Whether some holdings have no account yet (known from an unfiltered load).
+  // Investment accounts; null until loaded (or when loading failed).
+  const [accounts, setAccounts] = useState<Account[] | null>(null)
+  const [accountsFailed, setAccountsFailed] = useState(false)
+  // Whether some holdings have no account yet.
   const [hasUnassigned, setHasUnassigned] = useState(false)
 
   useEffect(() => {
     let active = true
-    // The page still works without accounts; the forms then link to create one.
     listAccounts()
-      .then((rows) => active && setAccounts(rows.filter((a) => a.type === 'investment')))
-      .catch(() => {})
+      .then((rows) => {
+        if (!active) return
+        setAccounts(rows.filter((a) => a.type === 'investment'))
+        setAccountsFailed(false)
+      })
+      .catch(() => active && setAccountsFailed(true))
     return () => {
       active = false
     }
@@ -922,7 +965,9 @@ export function Portfolio() {
       .then((data) => {
         if (!active) return
         setPortfolio(data)
-        if (!accountFilter) setHasUnassigned(data.holdings.some((h) => !h.accountId))
+        if (!accountFilter || accountFilter === NO_ACCOUNT) {
+          setHasUnassigned(data.holdings.some((h) => !h.accountId))
+        }
         setError(null)
       })
       .catch(
@@ -935,11 +980,27 @@ export function Portfolio() {
     }
   }, [reloadKey, accountFilter])
 
+  // Filtered to one account, the main load can't tell whether others have no
+  // account, so ask for the unassigned ones on their own.
+  useEffect(() => {
+    if (!accountFilter || accountFilter === NO_ACCOUNT) return
+    let active = true
+    getPortfolio(NO_ACCOUNT)
+      .then((data) => active && setHasUnassigned(data.holdings.length > 0))
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [reloadKey, accountFilter])
+
   const accountNames = useMemo(
-    () => new Map(accounts.map((a) => [a.id, accountLabel(a)])),
+    () => new Map((accounts ?? []).map((a) => [a.id, accountLabel(a)])),
     [accounts],
   )
   const filteredAccount = accountFilter && accountFilter !== NO_ACCOUNT ? accountFilter : undefined
+  // A filter for an account that no longer exists (e.g. an old bookmark).
+  const unknownFilter =
+    filteredAccount !== undefined && accounts !== null && !accounts.some((a) => a.id === filteredAccount)
 
   function changeFilter(next: string) {
     setForm('closed')
@@ -994,7 +1055,19 @@ export function Portfolio() {
         }
       />
 
-      {(accounts.length > 0 || hasUnassigned || accountFilter) && (
+      {accountsFailed && accounts === null && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]"
+        >
+          {t('Could not load accounts.')}
+          <Button size="sm" variant="secondary" onClick={() => setReloadKey((k) => k + 1)}>
+            {t('Try again')}
+          </Button>
+        </div>
+      )}
+
+      {((accounts?.length ?? 0) > 0 || hasUnassigned || accountFilter) && (
         <div>
           <label htmlFor="portfolio-account" className="sr-only">
             {t('Filter by account')}
@@ -1006,7 +1079,13 @@ export function Portfolio() {
             className={selectClass}
           >
             <option value="">{t('All accounts')}</option>
-            {accounts.map((a) => (
+            {/* Keeps the select honest while accounts load or for a deleted account. */}
+            {filteredAccount !== undefined && (accounts === null || unknownFilter) && (
+              <option value={filteredAccount}>
+                {unknownFilter ? t('Deleted account') : t('Loading…')}
+              </option>
+            )}
+            {(accounts ?? []).map((a) => (
               <option key={a.id} value={a.id}>
                 {accountLabel(a)}
               </option>
@@ -1075,6 +1154,7 @@ export function Portfolio() {
             key={form === 'new' ? 'new' : form.id}
             initial={form === 'new' ? undefined : form}
             accounts={accounts}
+            accountsFailed={accountsFailed}
             defaultAccountId={filteredAccount}
             onDone={handleChanged}
             onDelete={() => form !== 'new' && handleDeleteHolding(form)}
@@ -1086,6 +1166,7 @@ export function Portfolio() {
         <Sheet label={t('New dividend')} onClose={() => setForm('closed')}>
           <DividendForm
             accounts={accounts}
+            accountsFailed={accountsFailed}
             holdings={portfolio?.holdings ?? []}
             defaultAccountId={filteredAccount}
             onDone={handleChanged}

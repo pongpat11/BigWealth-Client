@@ -463,6 +463,7 @@ export const th: Record<string, string> = {
   'All accounts': 'ทุกบัญชี',
   'Filter by account': 'กรองตามบัญชี',
   'No account': 'ยังไม่ระบุบัญชี',
+  'Deleted account': 'บัญชีที่ถูกลบ',
   'Choose an account': 'เลือกบัญชี',
   'Choose the account that holds it.': 'เลือกบัญชีที่ถือสินทรัพย์นี้',
   'Choose the account it was paid into.': 'เลือกบัญชีที่ได้รับเงินปันผล',

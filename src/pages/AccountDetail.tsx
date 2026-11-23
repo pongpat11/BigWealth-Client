@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -85,19 +85,30 @@ function HoldingLine({ holding }: { holding: Holding }) {
 }
 
 /** Holdings linked to an investment account, loaded on their own so a slow price feed never holds up the page. */
-function AccountHoldings({ accountId }: { accountId: string }) {
+function AccountHoldings({
+  accountId,
+  onLoaded,
+}: {
+  accountId: string
+  /** Called once the holdings (and their refreshed prices) are in. */
+  onLoaded: () => void
+}) {
   const [holdings, setHoldings] = useState<Holding[] | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     let live = true
     getPortfolio(accountId)
-      .then((p) => live && setHoldings(p.holdings))
+      .then((p) => {
+        if (!live) return
+        setHoldings(p.holdings)
+        onLoaded()
+      })
       .catch(() => live && setFailed(true))
     return () => {
       live = false
     }
-  }, [accountId])
+  }, [accountId, onLoaded])
 
   return (
     <Card>
@@ -145,6 +156,17 @@ function AccountDetailView({ id }: { id: string }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
+
+  // Loading holdings refreshes their prices; reload the account so its
+  // holdings value in the balance card matches the list below.
+  const reloadAccount = useCallback(() => {
+    listAccounts()
+      .then((rows) => {
+        const a = rows.find((x) => x.id === id)
+        if (a) setAccount(a)
+      })
+      .catch(() => {})
+  }, [id])
 
   useEffect(() => {
     let live = true
@@ -328,7 +350,7 @@ function AccountDetailView({ id }: { id: string }) {
         </dl>
       </section>
 
-      {isInvestment && <AccountHoldings accountId={account.id} />}
+      {isInvestment && <AccountHoldings accountId={account.id} onLoaded={reloadAccount} />}
 
       <Card>
         <CardHeader title={t('Transactions')} />
