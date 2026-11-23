@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { t } from '@/lib/i18n'
 
 interface Props {
   children: ReactNode
@@ -36,13 +37,13 @@ export class ErrorBoundary extends Component<Props, State> {
           <TriangleAlert size={22} aria-hidden />
         </span>
         <p className="text-sm font-semibold text-[var(--color-ink)]">
-          Something went wrong on this screen
+          {t('Something went wrong on this screen')}
         </p>
         <p className="max-w-xs text-xs text-[var(--color-muted)]">
-          Your data is safe. Try again, or pick another screen from the menu.
+          {t('Your data is safe. Try again, or pick another screen from the menu.')}
         </p>
         <Button size="sm" onClick={() => this.setState({ failed: false })}>
-          Try again
+          {t('Try again')}
         </Button>
       </div>
     )

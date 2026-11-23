@@ -1,3 +1,4 @@
+import { dateLocale, getLanguage, t } from '@/lib/i18n'
 // Recurring rules API client: transactions the server creates on a schedule
 // (salary, rent, subscriptions).
 import { apiFetch } from './api'
@@ -86,14 +87,15 @@ export function describeSchedule(
   const start = new Date(y, m - 1, d)
   const n = r.interval
   if (r.frequency === 'weekly') {
-    const day = start.toLocaleDateString('en-GB', { weekday: 'short' })
-    return `${n === 1 ? 'Weekly' : `Every ${n} weeks`} on ${day}`
+    const day = start.toLocaleDateString(dateLocale(), { weekday: 'short' })
+    return n === 1 ? t('Weekly on {day}', { day }) : t('Every {n} weeks on {day}', { n, day })
   }
   if (r.frequency === 'monthly') {
-    return `${n === 1 ? 'Monthly' : `Every ${n} months`} on the ${ordinal(d)}`
+    const day = getLanguage() === 'th' ? String(d) : ordinal(d)
+    return n === 1 ? t('Monthly on the {day}', { day }) : t('Every {n} months on the {day}', { n, day })
   }
-  const date = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-  return `${n === 1 ? 'Yearly' : `Every ${n} years`} on ${date}`
+  const date = start.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' })
+  return n === 1 ? t('Yearly on {date}', { date }) : t('Every {n} years on {date}', { n, date })
 }
 
 function ordinal(n: number): string {

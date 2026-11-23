@@ -10,6 +10,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
 import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
+import { getLanguage, t } from '@/lib/i18n'
 import {
   ASSET_CLASSES,
   AUTO_PRICE_CLASSES,
@@ -68,16 +69,23 @@ function FxNote({ fx, unconverted }: { fx: Fx; unconverted: number }) {
       <p role="status" className="flex items-start gap-2 rounded-xl bg-amber-500/15 px-3 py-2 text-sm text-amber-600">
         <TriangleAlert size={16} aria-hidden className="mt-0.5 shrink-0" />
         <span>
-          No USD exchange rate is available right now, so {unconverted} USD{' '}
-          {unconverted === 1 ? 'item is' : 'items are'} left out of the baht totals.
+          {unconverted === 1
+            ? t('No USD exchange rate is available right now, so 1 USD item is left out of the baht totals.')
+            : t('No USD exchange rate is available right now, so {n} USD items are left out of the baht totals.', {
+                n: unconverted,
+              })}
         </span>
       </p>
     )
   }
   return (
     <p className="tnum px-1 text-xs text-[var(--color-muted)]">
-      USD converted at ฿{fx.usdThb.toFixed(2)} (reference rate
-      {fx.date ? `, ${formatDate(fx.date)}` : ''}).
+      {fx.date
+        ? t('USD converted at ฿{rate} (reference rate, {date}).', {
+            rate: fx.usdThb.toFixed(2),
+            date: formatDate(fx.date),
+          })
+        : t('USD converted at ฿{rate} (reference rate).', { rate: fx.usdThb.toFixed(2) })}
     </p>
   )
 }
@@ -120,14 +128,14 @@ function HoldingForm({
     const qty = Number(quantity)
     const cost = Number(avgCost)
     const current = Number(price)
-    if (!symbol.trim()) return setError('Enter a symbol.')
-    if (!Number.isFinite(qty) || qty <= 0) return setError('Enter a quantity greater than 0.')
+    if (!symbol.trim()) return setError(t('Enter a symbol.'))
+    if (!Number.isFinite(qty) || qty <= 0) return setError(t('Enter a quantity greater than 0.'))
     if (avgCost.trim() === '' || !Number.isFinite(cost) || cost < 0) {
-      return setError('Enter the average cost per unit.')
+      return setError(t('Enter the average cost per unit.'))
     }
     const priceGiven = price.trim() !== ''
     if (priceGiven ? !Number.isFinite(current) || current < 0 : !followsMarket) {
-      return setError('Enter the current price per unit.')
+      return setError(t('Enter the current price per unit.'))
     }
     setError(null)
     setSaving(true)
@@ -146,7 +154,7 @@ function HoldingForm({
       else await createHolding(input)
       onDone()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -156,27 +164,27 @@ function HoldingForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {initial ? `Edit ${initial.symbol}` : 'New holding'}
+            {initial ? t('Edit {name}', { name: initial.symbol }) : t('New holding')}
           </p>
           {error && <Message>{error}</Message>}
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="holding-symbol"
-              label="Symbol"
-              placeholder="e.g. PTT"
+              label={t('Symbol')}
+              placeholder={t('e.g. PTT')}
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
             />
             <Input
               id="holding-name"
-              label="Name (optional)"
-              placeholder="e.g. PTT PCL"
+              label={t('Name (optional)')}
+              placeholder={t('e.g. PTT PCL')}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <div className="flex flex-col gap-1.5">
               <label htmlFor="holding-class" className={labelClass}>
-                Asset class
+                {t('Asset class')}
               </label>
               <select
                 id="holding-class"
@@ -198,7 +206,7 @@ function HoldingForm({
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="holding-currency" className={labelClass}>
-                Currency
+                {t('Currency')}
               </label>
               <select
                 id="holding-currency"
@@ -216,7 +224,7 @@ function HoldingForm({
           </div>
           <Input
             id="holding-quantity"
-            label={assetClass === 'gold' ? 'Quantity (baht-weight)' : 'Quantity'}
+            label={assetClass === 'gold' ? t('Quantity (baht-weight)') : t('Quantity')}
             inputMode="decimal"
             placeholder="0"
             value={quantity}
@@ -225,7 +233,7 @@ function HoldingForm({
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="holding-cost"
-              label="Average cost / unit"
+              label={t('Average cost / unit')}
               inputMode="decimal"
               placeholder="0"
               value={avgCost}
@@ -233,9 +241,9 @@ function HoldingForm({
             />
             <Input
               id="holding-price"
-              label={followsMarket ? 'Price / unit (optional)' : 'Current price / unit'}
+              label={followsMarket ? t('Price / unit (optional)') : t('Current price / unit')}
               inputMode="decimal"
-              placeholder={followsMarket ? 'Looked up' : '0'}
+              placeholder={followsMarket ? t('Looked up') : '0'}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
             />
@@ -243,11 +251,11 @@ function HoldingForm({
           {canAutoPrice ? (
             <label className="flex items-center justify-between gap-3 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5">
               <span className="text-sm text-[var(--color-ink)]">
-                Update price automatically
+                {t('Update price automatically')}
                 <span className="block text-xs text-[var(--color-muted)]">
                   {assetClass === 'gold'
-                    ? 'Estimated per baht-weight of 96.5% gold (in THB) from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.'
-                    : 'From the market each time you open Portfolio (delayed up to 15 min).'}
+                    ? t('Estimated per baht-weight of 96.5% gold (in THB) from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.')
+                    : t('From the market each time you open Portfolio (delayed up to 15 min).')}
                 </span>
               </span>
               <input
@@ -259,23 +267,24 @@ function HoldingForm({
             </label>
           ) : (
             <p className="text-xs text-[var(--color-muted)]">
-              Prices for {ASSET_CLASS_META[assetClass].label.toLowerCase()} aren't fetched
-              automatically. Update the current price here when you want a fresh valuation.
+              {t("Prices for {assetClass} aren't fetched automatically. Update the current price here when you want a fresh valuation.", {
+                assetClass: getLanguage() === 'th' ? ASSET_CLASS_META[assetClass].label : ASSET_CLASS_META[assetClass].label.toLowerCase(),
+              })}
             </p>
           )}
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : initial ? 'Save changes' : 'Add holding'}
+              {saving ? t('Saving…') : initial ? t('Save changes') : t('Add holding')}
             </Button>
           </div>
           {initial && (
             <DeleteButton
               variant="block"
-              label="Delete holding"
+              label={t('Delete holding')}
               onClick={onDelete}
               disabled={saving}
             />
@@ -289,8 +298,8 @@ function HoldingForm({
 /** "live" for a price from the last hour, otherwise when it was set. */
 function priceAge(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60 * 60 * 1000) return 'live'
-  return `as of ${formatDate(iso)}`
+  if (ms < 60 * 60 * 1000) return t('live')
+  return t('as of {date}', { date: formatDate(iso) })
 }
 
 function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding) => void }) {
@@ -298,7 +307,7 @@ function HoldingRow({ holding, onEdit }: { holding: Holding; onEdit: (h: Holding
     <button
       type="button"
       onClick={() => onEdit(holding)}
-      aria-label={`Edit holding ${holding.symbol}`}
+      aria-label={t('Edit holding {name}', { name: holding.symbol })}
       className="flex w-full items-center justify-between gap-3 py-3 text-left transition-colors hover:bg-[var(--color-canvas)]"
     >
       <div className="min-w-0">
@@ -346,7 +355,7 @@ function HoldingsTab({
             <PieIcon size={22} aria-hidden />
           </span>
           <p className="text-sm text-[var(--color-muted)]">
-            No holdings yet. Add a stock, fund, crypto or gold position to see your portfolio.
+            {t('No holdings yet. Add a stock, fund, crypto or gold position to see your portfolio.')}
           </p>
         </CardBody>
       </Card>
@@ -357,7 +366,7 @@ function HoldingsTab({
     <>
       {portfolio.allocation.length > 0 && (
         <Card>
-          <CardHeader title="Allocation" />
+          <CardHeader title={t('Allocation')} />
           <CardBody className="flex items-center gap-4">
             <div className="h-32 w-32 shrink-0" aria-hidden>
               <ResponsiveContainer width="100%" height="100%">
@@ -402,13 +411,13 @@ function HoldingsTab({
       )}
 
       {portfolio.holdings.length > 1 && (
-        <div className="flex items-center justify-end gap-1" role="group" aria-label="Sort holdings">
-          <span className="mr-1 text-xs text-[var(--color-muted)]">Sort</span>
+        <div className="flex items-center justify-end gap-1" role="group" aria-label={t('Sort holdings')}>
+          <span className="mr-1 text-xs text-[var(--color-muted)]">{t('Sort')}</span>
           {(
             [
-              ['value', 'Value'],
-              ['gain', 'Gain'],
-              ['symbol', 'A–Z'],
+              ['value', t('Value')],
+              ['gain', t('Gain')],
+              ['symbol', t('A–Z')],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -466,13 +475,13 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
     e.preventDefault()
     const grossValue = Number(gross)
     const taxValue = tax.trim() === '' ? 0 : Number(tax)
-    if (!symbol.trim()) return setError('Enter a symbol.')
-    if (!payDate) return setError('Pick the pay date.')
+    if (!symbol.trim()) return setError(t('Enter a symbol.'))
+    if (!payDate) return setError(t('Pick the pay date.'))
     if (!Number.isFinite(grossValue) || grossValue <= 0) {
-      return setError('Enter a gross amount greater than 0.')
+      return setError(t('Enter a gross amount greater than 0.'))
     }
     if (!Number.isFinite(taxValue) || taxValue < 0 || taxValue > grossValue) {
-      return setError('Withholding tax must be between 0 and the gross amount.')
+      return setError(t('Withholding tax must be between 0 and the gross amount.'))
     }
     setError(null)
     setSaving(true)
@@ -486,7 +495,7 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
       })
       onDone()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -495,26 +504,26 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
     <Card>
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">New dividend</p>
+          <p className="text-sm font-semibold text-[var(--color-ink)]">{t('New dividend')}</p>
           {error && <Message>{error}</Message>}
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="dividend-symbol"
-              label="Symbol"
-              placeholder="e.g. PTT"
+              label={t('Symbol')}
+              placeholder={t('e.g. PTT')}
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
             />
             <Input
               id="dividend-date"
-              label="Pay date"
+              label={t('Pay date')}
               type="date"
               value={payDate}
               onChange={(e) => setPayDate(e.target.value)}
             />
             <Input
               id="dividend-gross"
-              label="Gross amount"
+              label={t('Gross amount')}
               inputMode="decimal"
               placeholder="0"
               value={gross}
@@ -522,7 +531,7 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
             />
             <Input
               id="dividend-tax"
-              label="Withholding tax"
+              label={t('Withholding tax')}
               inputMode="decimal"
               placeholder="0"
               value={tax}
@@ -531,7 +540,7 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="dividend-currency" className={labelClass}>
-              Currency
+              {t('Currency')}
             </label>
             <select
               id="dividend-currency"
@@ -547,15 +556,14 @@ function DividendForm({ onDone, onClose }: { onDone: () => void; onClose: () => 
             </select>
           </div>
           <p className="text-xs text-[var(--color-muted)]">
-            Thai stocks usually withhold 10%; US stocks 15–30% depending on your broker's tax
-            form.
+            {t("Thai stocks usually withhold 10%; US stocks 15–30% depending on your broker's tax form.")}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : 'Add dividend'}
+              {saving ? t('Saving…') : t('Add dividend')}
             </Button>
           </div>
         </form>
@@ -588,7 +596,7 @@ function DividendRow({ dividend, onDelete }: { dividend: Dividend; onDelete: () 
         {native(dividend.net, dividend.currency)}
       </td>
       <td className="w-10 pl-1 text-right">
-        <DeleteButton label={`Delete ${dividend.symbol} dividend`} onClick={onDelete} className="ml-auto" />
+        <DeleteButton label={t('Delete {name} dividend', { name: dividend.symbol })} onClick={onDelete} className="ml-auto" />
       </td>
     </tr>
   )
@@ -610,7 +618,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
       })
       .catch(
         (err) =>
-          active && setError(err instanceof ApiError ? err.message : 'Could not load dividends.'),
+          active && setError(err instanceof ApiError ? err.message : t('Could not load dividends.')),
       )
     return () => {
       active = false
@@ -624,7 +632,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
     const setItems = (fn: (items: Dividend[]) => Dividend[]) =>
       setData((list) => (list ? { ...list, items: fn(list.items) } : list))
     undoable.remove({
-      message: `Deleted ${dividend.symbol} dividend`,
+      message: t('Deleted {name} dividend', { name: dividend.symbol }),
       hide: () => setItems((items) => items.filter((d) => d.id !== dividend.id)),
       restore: () => setItems((items) => reinsert(items, dividend, index)),
       commit: () => deleteDividend(dividend.id),
@@ -636,10 +644,10 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
   return (
     <>
       {undoable.toast}
-      <div className="flex gap-2" role="group" aria-label="Dividend period">
+      <div className="flex gap-2" role="group" aria-label={t('Dividend period')}>
         {[
           { all: false, label: String(thisYear) },
-          { all: true, label: 'All years' },
+          { all: true, label: t('All years') },
         ].map((option) => (
           <button
             key={option.label}
@@ -667,7 +675,7 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
       {!error && data === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -677,9 +685,9 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
           <Card>
             <CardBody className="grid grid-cols-3 gap-3">
               {[
-                { label: 'Gross', value: formatTHB(data.totalGrossTHB), tone: 'text-[var(--color-ink)]' },
-                { label: 'Tax withheld', value: formatTHB(data.totalTaxTHB), tone: 'text-[var(--color-loss)]' },
-                { label: 'Net received', value: formatTHB(data.totalNetTHB), tone: 'text-[var(--color-gain)]' },
+                { label: t('Gross'), value: formatTHB(data.totalGrossTHB), tone: 'text-[var(--color-ink)]' },
+                { label: t('Tax withheld'), value: formatTHB(data.totalTaxTHB), tone: 'text-[var(--color-loss)]' },
+                { label: t('Net received'), value: formatTHB(data.totalNetTHB), tone: 'text-[var(--color-gain)]' },
               ].map((stat) => (
                 <div key={stat.label} className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
@@ -698,7 +706,9 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
             <Card>
               <CardBody>
                 <p className="text-sm text-[var(--color-muted)]">
-                  No dividends recorded {allYears ? 'yet' : `in ${thisYear}`}.
+                  {allYears
+                    ? t('No dividends recorded yet.')
+                    : t('No dividends recorded in {year}.', { year: thisYear })}
                 </p>
               </CardBody>
             </Card>
@@ -709,19 +719,19 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
                   <thead>
                     <tr className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
                       <th scope="col" className="py-2 pr-2 text-left font-semibold">
-                        Dividend
+                        {t('Dividend')}
                       </th>
                       <th scope="col" className="px-2 text-right font-semibold">
-                        Gross
+                        {t('Gross')}
                       </th>
                       <th scope="col" className="px-2 text-right font-semibold">
-                        Tax
+                        {t('Tax')}
                       </th>
                       <th scope="col" className="pl-2 text-right font-semibold">
-                        Net
+                        {t('Net')}
                       </th>
                       <th scope="col">
-                        <span className="sr-only">Actions</span>
+                        <span className="sr-only">{t('Actions')}</span>
                       </th>
                     </tr>
                   </thead>
@@ -741,6 +751,10 @@ function DividendsTab({ reloadKey, onChanged }: { reloadKey: number; onChanged: 
 }
 
 type Tab = 'holdings' | 'dividends'
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'holdings', label: t('Holdings') },
+  { value: 'dividends', label: t('Dividends') },
+]
 
 export function Portfolio() {
   const [tab, setTab] = useState<Tab>('holdings')
@@ -762,7 +776,7 @@ export function Portfolio() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load your portfolio.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load your portfolio.')),
       )
     return () => {
       active = false
@@ -783,7 +797,7 @@ export function Portfolio() {
     const setHoldings = (fn: (rows: Holding[]) => Holding[]) =>
       setPortfolio((p) => (p ? { ...p, holdings: fn(p.holdings) } : p))
     undoable.remove({
-      message: `Deleted ${holding.symbol}`,
+      message: t('Deleted {name}', { name: holding.symbol }),
       hide: () => setHoldings((rows) => rows.filter((h) => h.id !== holding.id)),
       restore: () => setHoldings((rows) => reinsert(rows, holding, index)),
       commit: () => deleteHolding(holding.id),
@@ -799,11 +813,11 @@ export function Portfolio() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Portfolio"
+        title={t('Portfolio')}
         action={
           <Button size="sm" onClick={() => setForm(form === 'new' ? 'closed' : 'new')}>
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
@@ -813,18 +827,18 @@ export function Portfolio() {
       {!error && portfolio === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
 
       {portfolio !== null && (
         <section
-          aria-label="Total value"
+          aria-label={t('Total value')}
           className="rounded-2xl bg-brand-600 p-5 text-white shadow-[var(--shadow-card)]"
         >
           <p className="text-[11px] font-semibold uppercase tracking-widest text-brand-100">
-            Total value
+            {t('Total value')}
           </p>
           <p className="tnum mt-1 text-[34px] font-bold leading-tight">
             {formatTHB(portfolio.totalValueTHB)}
@@ -834,13 +848,13 @@ export function Portfolio() {
               {portfolio.totalGainTHB >= 0 ? '▲' : '▼'} {formatSignedTHB(portfolio.totalGainTHB)}
               {portfolio.totalGainPct !== null && ` (${formatPercent(portfolio.totalGainPct)})`}
             </span>
-            <span className="text-xs text-brand-100">vs cost</span>
+            <span className="text-xs text-brand-100">{t('vs cost')}</span>
           </div>
         </section>
       )}
 
-      <div className="flex gap-2" role="tablist" aria-label="Portfolio sections">
-        {(['holdings', 'dividends'] as const).map((value) => (
+      <div className="flex gap-2" role="tablist" aria-label={t('Portfolio sections')}>
+        {TABS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
@@ -848,19 +862,19 @@ export function Portfolio() {
             aria-selected={tab === value}
             onClick={() => switchTab(value)}
             className={
-              'flex-1 rounded-xl py-2 text-sm font-semibold capitalize transition-colors ' +
+              'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
               (tab === value
                 ? 'bg-[var(--color-ink)] text-[var(--color-surface)]'
                 : 'border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
             }
           >
-            {value}
+            {label}
           </button>
         ))}
       </div>
 
       {form !== 'closed' && tab === 'holdings' && (
-        <Sheet label={form === 'new' ? 'New holding' : 'Edit holding'} onClose={() => setForm('closed')}>
+        <Sheet label={form === 'new' ? t('New holding') : t('Edit holding')} onClose={() => setForm('closed')}>
           <HoldingForm
             key={form === 'new' ? 'new' : form.id}
             initial={form === 'new' ? undefined : form}
@@ -871,7 +885,7 @@ export function Portfolio() {
         </Sheet>
       )}
       {form === 'new' && tab === 'dividends' && (
-        <Sheet label="New dividend" onClose={() => setForm('closed')}>
+        <Sheet label={t('New dividend')} onClose={() => setForm('closed')}>
           <DividendForm onDone={handleChanged} onClose={() => setForm('closed')} />
         </Sheet>
       )}

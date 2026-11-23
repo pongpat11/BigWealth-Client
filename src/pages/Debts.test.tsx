@@ -77,7 +77,7 @@ describe('Debts page', () => {
     const months = () => Number(/(\d+) months/.exec(status.textContent ?? '')![1])
     const before = months()
     // Avalanche (the default) is never more expensive than snowball.
-    expect(status).toHaveTextContent(/less than snowball|Same as snowball/)
+    expect(status).toHaveTextContent(/less than snowball|Same as snowball/i)
 
     await user.type(screen.getByLabelText(/extra per month/i), '10000')
     expect(months()).toBeLessThan(before)

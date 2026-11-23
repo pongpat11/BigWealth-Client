@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { WifiOff } from 'lucide-react'
+import { t } from '@/lib/i18n'
 
 /** Tracks the browser's online/offline state. */
 function useOnline(): boolean {
@@ -27,7 +28,7 @@ export function OfflineBanner() {
       className="mb-4 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-600"
     >
       <WifiOff size={16} aria-hidden className="shrink-0" />
-      You're offline. Data can't load or save until you reconnect.
+      {t("You're offline. Data can't load or save until you reconnect.")}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 // Thin fetch wrapper around the BigWealth API. Centralises the base URL,
 // JSON handling, error mapping, and transparent access-token refresh on 401.
 import { clearTokens, refreshSession } from './auth'
@@ -58,7 +59,7 @@ export async function apiFetch<T>(
     })
   } catch {
     // Network failure / server unreachable
-    throw new ApiError(0, 'Cannot reach the server. Please try again.')
+    throw new ApiError(0, t('Cannot reach the server. Please try again.'))
   }
 
   const isJson = res.headers.get('content-type')?.includes('application/json')

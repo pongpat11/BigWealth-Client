@@ -13,6 +13,7 @@ import { listAccounts, type Account } from '@/lib/accounts'
 import { listCategories, type Category } from '@/lib/categories'
 import { listLabels, type Label } from '@/lib/labels'
 import { browserTimezone, formatDate, formatTHB } from '@/lib/format'
+import { t } from '@/lib/i18n'
 import type { Currency } from '@/lib/transactions'
 import {
   createRecurring,
@@ -28,9 +29,9 @@ import {
 
 const FALLBACK_COLOR = '#94a3b8'
 const FREQUENCIES: { value: Frequency; label: string; unit: string }[] = [
-  { value: 'weekly', label: 'Weekly', unit: 'weeks' },
-  { value: 'monthly', label: 'Monthly', unit: 'months' },
-  { value: 'yearly', label: 'Yearly', unit: 'years' },
+  { value: 'weekly', label: t('Weekly'), unit: t('weeks') },
+  { value: 'monthly', label: t('Monthly'), unit: t('months') },
+  { value: 'yearly', label: t('Yearly'), unit: t('years') },
 ]
 
 const selectClass =
@@ -117,11 +118,11 @@ function RecurringForm({
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const value = Number(amount)
-    if (!Number.isFinite(value) || value <= 0) return setError('Enter an amount greater than 0.')
-    if (!categoryId) return setError('Pick a category.')
-    if (!validInterval) return setError('Repeat every 1 to 12.')
-    if (!startDate) return setError('Pick a start date.')
-    if (endDate && endDate < startDate) return setError('End date is before the start date.')
+    if (!Number.isFinite(value) || value <= 0) return setError(t('Enter an amount greater than 0.'))
+    if (!categoryId) return setError(t('Pick a category.'))
+    if (!validInterval) return setError(t('Repeat every 1 to 12.'))
+    if (!startDate) return setError(t('Pick a start date.'))
+    if (endDate && endDate < startDate) return setError(t('End date is before the start date.'))
     setError(null)
     setSaving(true)
     const input = {
@@ -146,7 +147,7 @@ function RecurringForm({
         : await createRecurring(input)
       onSaved(saved, isEdit)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -156,7 +157,7 @@ function RecurringForm({
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {isEdit ? 'Edit recurring' : 'New recurring'}
+            {isEdit ? t('Edit recurring') : t('New recurring')}
           </p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
@@ -191,7 +192,7 @@ function RecurringForm({
             <div className="flex-1">
               <Input
                 id="rec-amount"
-                label="Amount"
+                label={t('Amount')}
                 type="number"
                 inputMode="decimal"
                 min="0"
@@ -203,7 +204,7 @@ function RecurringForm({
             </div>
             <div className="w-28">
               <label htmlFor="rec-currency" className={labelClass}>
-                Currency
+                {t('Currency')}
               </label>
               <select
                 id="rec-currency"
@@ -219,7 +220,7 @@ function RecurringForm({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="rec-category" className={labelClass}>
-              Category
+              {t('Category')}
             </label>
             <select
               id="rec-category"
@@ -230,7 +231,7 @@ function RecurringForm({
               }}
               className={selectClass}
             >
-              <option value="">Select…</option>
+              <option value="">{t('Select…')}</option>
               {topLevel.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -242,7 +243,7 @@ function RecurringForm({
           {subOptions.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="rec-subcategory" className={labelClass}>
-                Sub-category (optional)
+                {t('Sub-category (optional)')}
               </label>
               <select
                 id="rec-subcategory"
@@ -250,7 +251,7 @@ function RecurringForm({
                 onChange={(e) => setSubCategoryId(e.target.value)}
                 className={selectClass}
               >
-                <option value="">None</option>
+                <option value="">{t('None')}</option>
                 {subOptions.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -263,7 +264,7 @@ function RecurringForm({
           {accounts.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="rec-account" className={labelClass}>
-                Account (optional)
+                {t('Account (optional)')}
               </label>
               <select
                 id="rec-account"
@@ -271,7 +272,7 @@ function RecurringForm({
                 onChange={(e) => setAccountId(e.target.value)}
                 className={selectClass}
               >
-                <option value="">None</option>
+                <option value="">{t('None')}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -284,7 +285,7 @@ function RecurringForm({
           <div className="flex gap-3">
             <div className="flex-1">
               <label htmlFor="rec-frequency" className={labelClass}>
-                Repeats
+                {t('Repeats')}
               </label>
               <select
                 id="rec-frequency"
@@ -302,7 +303,7 @@ function RecurringForm({
             <div className="w-28">
               <Input
                 id="rec-interval"
-                label={`Every (${unit})`}
+                label={t('Every ({unit})', { unit })}
                 type="number"
                 inputMode="numeric"
                 min="1"
@@ -317,14 +318,14 @@ function RecurringForm({
           <div className="grid grid-cols-2 gap-3">
             <Input
               id="rec-start"
-              label="Starts"
+              label={t('Starts')}
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
             <Input
               id="rec-end"
-              label="Ends (optional)"
+              label={t('Ends (optional)')}
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
@@ -332,13 +333,15 @@ function RecurringForm({
           </div>
           {firstEntry && active && (
             <p className="-mt-2 text-xs text-[var(--color-muted)]">
-              {isEdit ? 'Next' : 'First'} entry: {formatDate(firstEntry)}. Past dates aren't filled in.
+              {isEdit
+                ? t("Next entry: {date}. Past dates aren't filled in.", { date: formatDate(firstEntry) })
+                : t("First entry: {date}. Past dates aren't filled in.", { date: formatDate(firstEntry) })}
             </p>
           )}
 
           {labels.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <span className={labelClass}>Labels</span>
+              <span className={labelClass}>{t('Labels')}</span>
               <div className="flex flex-wrap gap-2">
                 {labels.map((l) => {
                   const on = selectedLabelIds.includes(l.id)
@@ -369,9 +372,9 @@ function RecurringForm({
 
           <Input
             id="rec-note"
-            label="Note (optional)"
+            label={t('Note (optional)')}
             type="text"
-            placeholder="e.g. Netflix"
+            placeholder={t('e.g. Netflix')}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -379,9 +382,9 @@ function RecurringForm({
           {isEdit && (
             <label className="flex items-center justify-between gap-3 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5">
               <span className="text-sm text-[var(--color-ink)]">
-                Active
+                {t('Active')}
                 <span className="block text-xs text-[var(--color-muted)]">
-                  Paused rules create nothing. Resuming skips the missed dates.
+                  {t('Paused rules create nothing. Resuming skips the missed dates.')}
                 </span>
               </span>
               <input
@@ -395,15 +398,15 @@ function RecurringForm({
 
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add recurring'}
+              {saving ? t('Saving…') : isEdit ? t('Save changes') : t('Add recurring')}
             </Button>
           </div>
 
           {isEdit && (
-            <DeleteButton variant="block" label="Delete recurring" onClick={onDelete} disabled={saving} />
+            <DeleteButton variant="block" label={t('Delete recurring')} onClick={onDelete} disabled={saving} />
           )}
         </form>
       </CardBody>
@@ -414,17 +417,17 @@ function RecurringForm({
 function RuleRow({ rule, onEdit }: { rule: RecurringRule; onEdit: (r: RecurringRule) => void }) {
   const cat = rule.category
   const income = rule.type === 'income'
-  const title = rule.note || cat?.name || 'Recurring'
+  const title = rule.note || cat?.name || t('Recurring')
   const when = !rule.active
-    ? 'Paused'
+    ? t('Paused')
     : rule.nextDate
-      ? `Next ${formatDate(rule.nextDate)}`
-      : 'Finished'
+      ? t('Next {date}', { date: formatDate(rule.nextDate) })
+      : t('Finished')
   return (
     <button
       type="button"
       onClick={() => onEdit(rule)}
-      aria-label={`Edit ${title}`}
+      aria-label={t('Edit {name}', { name: title })}
       className={
         'flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-[var(--color-canvas)] ' +
         (rule.nextDate ? '' : 'opacity-60')
@@ -476,7 +479,7 @@ export function Recurring() {
       .catch(
         (err) =>
           live &&
-          setError(err instanceof ApiError ? err.message : 'Could not load recurring items.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load recurring items.')),
       )
     return () => {
       live = false
@@ -500,7 +503,7 @@ export function Recurring() {
     closeForm()
     const index = (items ?? []).findIndex((r) => r.id === rule.id)
     undoable.remove({
-      message: `Deleted “${rule.note || rule.category?.name || 'recurring'}”`,
+      message: t('Deleted “{name}”', { name: rule.note || rule.category?.name || t('recurring') }),
       hide: () => setItems((prev) => (prev ?? []).filter((r) => r.id !== rule.id)),
       restore: () => setItems((prev) => reinsert(prev ?? [], rule, index)),
       commit: () => deleteRecurring(rule.id),
@@ -522,7 +525,7 @@ export function Recurring() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Recurring"
+        title={t('Recurring')}
         action={
           <Button
             size="sm"
@@ -532,13 +535,13 @@ export function Recurring() {
             }}
           >
             <Plus size={16} aria-hidden />
-            Add
+            {t('Add')}
           </Button>
         }
       />
 
       {formOpen && (
-        <Sheet label={editing ? 'Edit recurring' : 'New recurring'} onClose={closeForm}>
+        <Sheet label={editing ? t('Edit recurring') : t('New recurring')} onClose={closeForm}>
           <RecurringForm
             key={editing?.id ?? 'new'}
             initial={editing ?? undefined}
@@ -563,7 +566,7 @@ export function Recurring() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -575,8 +578,7 @@ export function Recurring() {
               <Repeat size={22} aria-hidden />
             </span>
             <p className="max-w-xs text-sm text-[var(--color-muted)]">
-              Nothing recurring yet. Add your salary, rent or subscriptions and they'll be
-              entered for you on each due date.
+              {t("Nothing recurring yet. Add your salary, rent or subscriptions and they'll be entered for you on each due date.")}
             </p>
           </CardBody>
         </Card>
@@ -586,7 +588,7 @@ export function Recurring() {
         <div className="grid grid-cols-2 gap-3">
           <Card>
             <CardBody>
-              <p className="text-xs text-[var(--color-muted)]">In per month</p>
+              <p className="text-xs text-[var(--color-muted)]">{t('In per month')}</p>
               <p className="tnum mt-1 text-lg font-bold text-[var(--color-gain)]">
                 {formatTHB(monthlyIn)}
               </p>
@@ -594,7 +596,7 @@ export function Recurring() {
           </Card>
           <Card>
             <CardBody>
-              <p className="text-xs text-[var(--color-muted)]">Out per month</p>
+              <p className="text-xs text-[var(--color-muted)]">{t('Out per month')}</p>
               <p className="tnum mt-1 text-lg font-bold text-[var(--color-ink)]">
                 {formatTHB(monthlyOut)}
               </p>

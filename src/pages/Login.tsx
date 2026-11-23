@@ -5,6 +5,7 @@ import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { isAuthenticated, login } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
+import { t } from '@/lib/i18n'
 
 /** Google "G" mark — lucide has no brand logo, so inline the official colors. */
 function GoogleMark() {
@@ -56,7 +57,7 @@ export function Login() {
       navigate(from, { replace: true })
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : 'Something went wrong. Please try again.',
+        err instanceof ApiError ? err.message : t('Something went wrong. Please try again.'),
       )
     } finally {
       setSubmitting(false)
@@ -72,10 +73,10 @@ export function Login() {
             ฿
           </div>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-[var(--color-ink)]">
-            Welcome back
+            {t('Welcome back')}
           </h1>
           <p className="mt-1 text-sm text-[var(--color-muted)]">
-            Sign in to your BigWealth account
+            {t('Sign in to your BigWealth account')}
           </p>
         </div>
 
@@ -92,7 +93,7 @@ export function Login() {
               )}
               <Input
                 id="email"
-                label="Email"
+                label={t('Email')}
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
@@ -103,7 +104,7 @@ export function Login() {
               <div className="space-y-1.5">
                 <Input
                   id="password"
-                  label="Password"
+                  label={t('Password')}
                   type="password"
                   autoComplete="current-password"
                   placeholder="••••••••"
@@ -116,37 +117,37 @@ export function Login() {
                     to="#"
                     className="text-xs font-medium text-brand-600 hover:text-brand-700"
                   >
-                    Forgot password?
+                    {t('Forgot password?')}
                   </Link>
                 </div>
               </div>
 
               <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Signing in…' : 'Sign in'}
+                {submitting ? t('Signing in…') : t('Sign in')}
               </Button>
 
               {/* divider */}
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-[var(--color-line)]" />
-                <span className="text-xs text-[var(--color-muted)]">or</span>
+                <span className="text-xs text-[var(--color-muted)]">{t('or')}</span>
                 <span className="h-px flex-1 bg-[var(--color-line)]" />
               </div>
 
               <Button type="button" variant="secondary" className="w-full">
                 <GoogleMark />
-                Continue with Google
+                {t('Continue with Google')}
               </Button>
             </form>
           </CardBody>
         </Card>
 
         <p className="mt-6 text-center text-sm text-[var(--color-muted)]">
-          Don&apos;t have an account?{' '}
+          {t("Don't have an account?")}{' '}
           <Link
             to="#"
             className="font-semibold text-brand-600 hover:text-brand-700"
           >
-            Sign up
+            {t('Sign up')}
           </Link>
         </p>
       </div>

@@ -16,6 +16,7 @@ import {
   updateCategory,
   type Category,
 } from '@/lib/categories'
+import { t } from '@/lib/i18n'
 
 const FALLBACK_COLOR = '#94a3b8'
 
@@ -39,7 +40,7 @@ function NewCategoryForm({
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     setError(null)
@@ -48,7 +49,7 @@ function NewCategoryForm({
       const created = await createCategory({ name: name.trim(), kind })
       onSaved(created)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -57,7 +58,7 @@ function NewCategoryForm({
     <Card>
       <CardBody>
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">New category</p>
+          <p className="text-sm font-semibold text-[var(--color-ink)]">{t('New category')}</p>
           {error && (
             <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
               {error}
@@ -82,18 +83,18 @@ function NewCategoryForm({
           </div>
           <Input
             id="new-category-name"
-            label="Name"
-            placeholder="e.g. Side Hustle"
+            label={t('Name')}
+            placeholder={t('e.g. Side Hustle')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
           />
           <div className="flex gap-2">
             <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              Cancel
+              {t('Cancel')}
             </Button>
             <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? 'Saving…' : 'Add category'}
+              {saving ? t('Saving…') : t('Add category')}
             </Button>
           </div>
         </form>
@@ -118,7 +119,7 @@ function AddSubCategoryRow({
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Enter a name.')
+      setError(t('Enter a name.'))
       return
     }
     setSaving(true)
@@ -131,7 +132,7 @@ function AddSubCategoryRow({
       })
       onSaved(created)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.')
+      setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
       setSaving(false)
     }
   }
@@ -144,14 +145,14 @@ function AddSubCategoryRow({
           autoFocus
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Sub-category name"
+          placeholder={t('Sub-category name')}
           className="h-9 flex-1 rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500"
         />
         <Button type="submit" size="sm" disabled={saving}>
-          {saving ? '…' : 'Save'}
+          {saving ? '…' : t('Save')}
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={onClose}>
-          Cancel
+          {t('Cancel')}
         </Button>
       </div>
     </form>
@@ -185,7 +186,7 @@ function CategoryGroup({
       onChanged(updated)
       setRenaming(false)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not rename.')
+      setError(err instanceof ApiError ? err.message : t('Could not rename.'))
     }
   }
 
@@ -216,7 +217,7 @@ function CategoryGroup({
             )}
           </div>
           {category.isDefault ? (
-            <Badge tone="neutral">Default</Badge>
+            <Badge tone="neutral">{t('Default')}</Badge>
           ) : (
             <div className="flex shrink-0 items-center gap-1">
               <button
@@ -224,10 +225,10 @@ function CategoryGroup({
                 onClick={() => setRenaming((v) => !v)}
                 className="h-9 rounded-xl px-2 text-xs font-medium text-brand-600 hover:bg-[var(--color-canvas)]"
               >
-                Rename
+                {t('Rename')}
               </button>
               <DeleteButton
-                label={`Delete ${category.name}`}
+                label={t('Delete {name}', { name: category.name })}
                 onClick={() => onDelete(category)}
                 className="-mr-2"
               />
@@ -247,7 +248,7 @@ function CategoryGroup({
                 </span>
                 {!sub.isDefault && (
                   <DeleteButton
-                    label={`Delete ${sub.name}`}
+                    label={t('Delete {name}', { name: sub.name })}
                     onClick={() => onDelete(sub)}
                     className="-mr-2"
                   />
@@ -272,7 +273,7 @@ function CategoryGroup({
             onClick={() => setAddingSub(true)}
             className="pl-1 text-left text-xs font-semibold text-brand-600"
           >
-            + Add sub-category
+            {t('+ Add sub-category')}
           </button>
         )}
       </CardBody>
@@ -292,7 +293,7 @@ export function Categories() {
       .catch(
         (err) =>
           active &&
-          setError(err instanceof ApiError ? err.message : 'Could not load categories.'),
+          setError(err instanceof ApiError ? err.message : t('Could not load categories.')),
       )
     return () => {
       active = false
@@ -327,8 +328,11 @@ export function Categories() {
     const subs = removed.length - 1
     undoable.remove({
       message:
-        `Deleted “${category.name}”` +
-        (subs > 0 ? ` and ${subs} sub-categor${subs === 1 ? 'y' : 'ies'}` : ''),
+        subs === 0
+          ? t('Deleted “{name}”', { name: category.name })
+          : subs === 1
+            ? t('Deleted “{name}” and 1 sub-category', { name: category.name })
+            : t('Deleted “{name}” and {n} sub-categories', { name: category.name, n: subs }),
       hide: () =>
         setItems((prev) =>
           (prev ?? []).filter((c) => c.id !== category.id && c.parentId !== category.id),
@@ -348,12 +352,12 @@ export function Categories() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Categories"
-        subtitle="Defaults are built-in · add your own"
+        title={t('Categories')}
+        subtitle={t('Defaults are built-in · add your own')}
         action={
           <Button size="sm" onClick={() => setAddingCategory((v) => !v)}>
             <Plus size={16} aria-hidden />
-            New
+            {t('New')}
           </Button>
         }
       />
@@ -382,7 +386,7 @@ export function Categories() {
       {!error && items === null && (
         <Card>
           <CardBody>
-            <p className="text-sm text-[var(--color-muted)]">Loading…</p>
+            <p className="text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
           </CardBody>
         </Card>
       )}
@@ -392,7 +396,7 @@ export function Categories() {
           {defaults.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-                Defaults
+                {t('Defaults')}
               </p>
               <div className="space-y-3">
                 {defaults.map((cat) => (
@@ -410,13 +414,13 @@ export function Categories() {
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">
-              Your categories
+              {t('Your categories')}
             </p>
             {custom.length === 0 ? (
               <Card>
                 <CardBody>
                   <p className="text-sm text-[var(--color-muted)]">
-                    No custom categories yet.
+                    {t('No custom categories yet.')}
                   </p>
                 </CardBody>
               </Card>

@@ -1,3 +1,4 @@
+import { dateLocale, t } from '@/lib/i18n'
 // Formatting helpers. Base currency is THB (฿); all net-worth figures
 // are assumed already converted to THB by the (future) FX layer.
 
@@ -59,7 +60,7 @@ export function formatDate(iso: string): string {
     d.getFullYear() === now.getFullYear()
       ? { day: 'numeric', month: 'short' }
       : { day: 'numeric', month: 'short', year: '2-digit' }
-  return d.toLocaleDateString('en-GB', opts)
+  return d.toLocaleDateString(dateLocale(), opts)
 }
 
 /** Days remaining until an ISO date (negative if past). */
@@ -98,7 +99,7 @@ export function nowDateTimeLocalValue(): string {
 
 /** Date + time shown in a specific timezone, e.g. "5 Jul 2026, 12:30". */
 export function formatDateTime(iso: string, timeZone?: string | null): string {
-  return new Date(iso).toLocaleString('en-GB', {
+  return new Date(iso).toLocaleString(dateLocale(), {
     timeZone: timeZone ?? undefined,
     day: 'numeric',
     month: 'short',
@@ -122,7 +123,7 @@ export function shiftMonth(month: string, delta: number): string {
 /** 'YYYY-MM' → "July 2026". */
 export function formatMonth(month: string): string {
   const [year, m] = month.split('-').map(Number)
-  return new Date(year, m - 1, 1).toLocaleDateString('en-GB', {
+  return new Date(year, m - 1, 1).toLocaleDateString(dateLocale(), {
     month: 'long',
     year: 'numeric',
   })
@@ -133,7 +134,7 @@ export function formatDayHeading(iso: string): string {
   const d = new Date(iso)
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const days = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  if (days === 0) return t('Today')
+  if (days === 1) return t('Yesterday')
+  return d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', year: 'numeric' })
 }
