@@ -188,6 +188,9 @@ function AppearanceCard() {
             value={language}
             onChange={chooseLanguage}
           />
+          <p className="text-xs text-[var(--color-muted)]">
+            {t('Changing the language reloads the page. Save your edits first.')}
+          </p>
         </div>
       </CardBody>
     </Card>

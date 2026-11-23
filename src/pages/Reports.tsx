@@ -31,6 +31,12 @@ const RANGE_LABELS: Record<ReportRange, string> = {
   YTD: t('Year to date'),
   '1Y': t('Last 12 months'),
 }
+const RANGE_CHIPS: Record<ReportRange, string> = {
+  '1M': t('1M'),
+  '3M': t('3M'),
+  YTD: t('YTD'),
+  '1Y': t('1Y'),
+}
 
 /** 'YYYY-MM' → 'Jul' (or "Jul '25" when the range spans years). */
 function monthLabel(month: string, withYear: boolean): string {
@@ -40,7 +46,8 @@ function monthLabel(month: string, withYear: boolean): string {
 }
 
 function downloadCsv(report: Report) {
-  const blob = new Blob([reportToCsv(report)], { type: 'text/csv;charset=utf-8' })
+  // The BOM makes Excel read the file as UTF-8, so Thai headers aren't garbled.
+  const blob = new Blob(['\ufeff' + reportToCsv(report)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -126,7 +133,7 @@ export function Reports() {
                 : 'border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
             }
           >
-            {r}
+            {RANGE_CHIPS[r]}
           </button>
         ))}
       </div>
