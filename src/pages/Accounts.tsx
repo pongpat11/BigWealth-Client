@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { CreditCard, Landmark, Plus, TrendingUp, Wallet } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Landmark, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -19,34 +20,20 @@ import {
 } from '@/lib/accounts'
 import type { Currency } from '@/types'
 
+import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
+
 const CURRENCIES: Currency[] = ['THB', 'USD']
 
-// Display order + presentation for each account type.
-const TYPES: { value: AccountType; label: string; icon: typeof Wallet }[] = [
-  { value: 'cash', label: 'Cash', icon: Wallet },
-  { value: 'bank', label: 'Bank', icon: Landmark },
-  { value: 'investment', label: 'Investment', icon: TrendingUp },
-  { value: 'debt', label: 'Debt', icon: CreditCard },
-]
 const selectClass =
   'h-11 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-[15px] text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500'
 
-function formatMoney(amount: number, currency: Currency) {
-  if (currency === 'THB') return formatTHB(amount)
-  return `${amount.toLocaleString('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
 
 /** A debt balance counts against net worth; everything else adds to it. */
 function signedBalance(a: Account): number {
   return a.type === 'debt' ? -a.currentBalance : a.currentBalance
 }
 
-function AccountForm({
+export function AccountForm({
   initial,
   onSaved,
   onDelete,
@@ -113,7 +100,7 @@ function AccountForm({
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            {TYPES.map(({ value, label, icon: IconCmp }) => (
+            {ACCOUNT_TYPES.map(({ value, label, icon: IconCmp }) => (
               <button
                 key={value}
                 type="button"
@@ -215,7 +202,7 @@ function AccountRow({
 
   return (
     <div className="flex items-center justify-between gap-3 py-3">
-      <button type="button" onClick={onEdit} className="min-w-0 flex-1 text-left">
+      <Link to={`/accounts/${account.id}`} className="min-w-0 flex-1 text-left">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
           {account.name}
         </p>
@@ -224,6 +211,14 @@ function AccountRow({
             {account.institution}
           </p>
         )}
+      </Link>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Edit ${account.name}`}
+        className="-mx-1 rounded-lg p-1 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+      >
+        <Pencil size={16} aria-hidden />
       </button>
       <div className="flex items-center gap-3">
         <span
@@ -267,7 +262,7 @@ export function Accounts() {
 
   const grouped = useMemo(() => {
     const all = items ?? []
-    return TYPES.map((t) => ({
+    return ACCOUNT_TYPES.map((t) => ({
       ...t,
       accounts: all.filter((a) => a.type === t.value),
     })).filter((g) => g.accounts.length > 0)
