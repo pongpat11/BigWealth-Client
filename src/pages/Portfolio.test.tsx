@@ -223,9 +223,64 @@ describe('Portfolio page', () => {
     await user.click(screen.getByRole('button', { name: /add holding/i }))
     await waitFor(() =>
       expect(api.createHolding).toHaveBeenCalledWith(
-        expect.objectContaining({ assetClass: 'gold', currency: 'THB', quantity: 2, autoPrice: true }),
+        expect.objectContaining({
+          assetClass: 'gold',
+          goldUnit: 'baht',
+          currency: 'THB',
+          quantity: 2,
+          autoPrice: true,
+        }),
       ),
     )
+  })
+
+  it('adds gold in troy ounces, in dollars by default', async () => {
+    vi.mocked(api.createHolding).mockResolvedValue(ptt)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'xau')
+    await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
+    expect(screen.getByRole('radio', { name: /baht-weight/i })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'Troy ounce' }))
+    expect(screen.getByLabelText('Currency')).toHaveValue('USD')
+    expect(screen.getByText(/per troy ounce/i)).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Quantity (troy oz)'), '1.5')
+    await user.type(screen.getByLabelText(/average cost/i), '2950')
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    await waitFor(() =>
+      expect(api.createHolding).toHaveBeenCalledWith(
+        expect.objectContaining({ assetClass: 'gold', goldUnit: 'oz', currency: 'USD', quantity: 1.5 }),
+      ),
+    )
+  })
+
+  it('lists baht-weight and ounce gold apart, each with its total', async () => {
+    const gold = (id: string, goldUnit: Holding['goldUnit'], quantity: number, currency: Holding['currency']): Holding => ({
+      ...ptt,
+      id,
+      symbol: 'GOLD',
+      assetClass: 'gold',
+      goldUnit,
+      currency,
+      quantity,
+    })
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      // A row saved before units existed (no goldUnit) counts baht-weight.
+      holdings: [gold('g1', 'baht', 2, 'THB'), gold('g2', undefined, 1, 'THB'), gold('g3', 'oz', 1.5, 'USD')],
+    })
+    renderPage()
+
+    const baht = await screen.findByRole('region', { name: 'Gold · Baht-weight (96.5%)' })
+    expect(within(baht).getByText('3 baht total')).toBeInTheDocument()
+    expect(within(baht).getByText('2 baht · ฿38.25')).toBeInTheDocument()
+    expect(within(baht).getByText('1 baht · ฿38.25')).toBeInTheDocument()
+    const oz = screen.getByRole('region', { name: 'Gold · Troy ounce' })
+    expect(within(oz).getByText('1.5 oz total')).toBeInTheDocument()
+    expect(within(oz).getByText('1.5 oz · $38.25')).toBeInTheDocument()
   })
 
   it('picks dollars for US stocks and crypto', async () => {

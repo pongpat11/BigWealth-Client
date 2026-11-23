@@ -1,7 +1,7 @@
 import { t } from '@/lib/i18n'
 // Portfolio API client: investment holdings and dividends. Prices are entered
-// by hand, or kept current by the server for SET, US and crypto holdings with
-// autoPrice on. The server converts USD to THB with a daily reference rate.
+// by hand, or kept current by the server for SET, US, crypto and gold holdings
+// with autoPrice on. The server converts USD to THB with a daily reference rate.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
 import type { Currency } from '@/types'
@@ -22,6 +22,20 @@ export const ASSET_CLASS_META: Record<AssetClass, { label: string; color: string
   cash: { label: t('Cash'), color: '#94a3b8' },
 }
 
+/** What one unit of gold is: a Thai baht-weight of 96.5% bar gold, or a troy ounce. */
+export const GOLD_UNITS = ['baht', 'oz'] as const
+export type GoldUnit = (typeof GOLD_UNITS)[number]
+
+export const GOLD_UNIT_META: Record<GoldUnit, { label: string; short: string }> = {
+  baht: { label: t('Baht-weight (96.5%)'), short: t('baht') },
+  oz: { label: t('Troy ounce'), short: 'oz' },
+}
+
+/** The unit a gold holding counts (older rows without one count baht-weight); null for other classes. */
+export function goldUnitOf(h: Pick<Holding, 'assetClass' | 'goldUnit'>): GoldUnit | null {
+  return h.assetClass === 'gold' ? (h.goldUnit ?? 'baht') : null
+}
+
 export interface Fx {
   /** THB per 1 USD, or null when no rate is available. */
   usdThb: number | null
@@ -35,6 +49,8 @@ export interface Holding {
   symbol: string
   name: string | null
   assetClass: AssetClass
+  /** Gold only: what `quantity` counts. */
+  goldUnit?: GoldUnit | null
   currency: Currency
   quantity: number
   /** Per unit, in the holding's currency. */
@@ -55,6 +71,8 @@ export interface HoldingInput {
   symbol: string
   name: string | null
   assetClass: AssetClass
+  /** Sent for gold only. */
+  goldUnit?: GoldUnit
   currency: Currency
   quantity: number
   avgCost: number

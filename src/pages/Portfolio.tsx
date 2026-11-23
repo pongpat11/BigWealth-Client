@@ -22,6 +22,9 @@ import {
   deleteDividend,
   deleteHolding,
   getPortfolio,
+  GOLD_UNITS,
+  GOLD_UNIT_META,
+  goldUnitOf,
   listDividends,
   NO_ACCOUNT,
   sortHoldings,
@@ -31,6 +34,7 @@ import {
   type Dividend,
   type DividendList,
   type Fx,
+  type GoldUnit,
   type Holding,
   type Portfolio as PortfolioData,
 } from '@/lib/portfolio'
@@ -52,6 +56,12 @@ function native(amount: number, currency: Currency, digits = 2): string {
 
 function quantityText(quantity: number): string {
   return quantity.toLocaleString('en-US', { maximumFractionDigits: 8 })
+}
+
+/** "2 baht" / "1.5 oz" for gold; the bare number otherwise. */
+function holdingQuantity(h: Pick<Holding, 'assetClass' | 'goldUnit' | 'quantity'>): string {
+  const unit = goldUnitOf(h)
+  return unit ? `${quantityText(h.quantity)} ${GOLD_UNIT_META[unit].short}` : quantityText(h.quantity)
 }
 
 function gainTone(value: number | null): string {
@@ -200,6 +210,7 @@ function HoldingForm({
   const [name, setName] = useState(initial?.name ?? '')
   const [assetClass, setAssetClass] = useState<AssetClass>(initial?.assetClass ?? 'set')
   const [currency, setCurrency] = useState<Currency>(initial?.currency ?? 'THB')
+  const [goldUnit, setGoldUnit] = useState<GoldUnit>((initial && goldUnitOf(initial)) ?? 'baht')
   const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '')
   const [avgCost, setAvgCost] = useState(initial ? String(initial.avgCost) : '')
   const [price, setPrice] = useState(initial ? String(initial.price) : '')
@@ -234,6 +245,7 @@ function HoldingForm({
       symbol: symbol.trim().toUpperCase(),
       name: name.trim() || null,
       assetClass,
+      ...(assetClass === 'gold' && { goldUnit }),
       currency,
       quantity: qty,
       avgCost: cost,
@@ -291,8 +303,11 @@ function HoldingForm({
                 onChange={(e) => {
                   const next = e.target.value as AssetClass
                   setAssetClass(next)
-                  // US stocks and crypto are quoted in dollars.
-                  if (!initial) setCurrency(next === 'us' || next === 'crypto' ? 'USD' : 'THB')
+                  // US stocks, crypto and ounce gold are quoted in dollars.
+                  if (!initial) {
+                    const usd = next === 'us' || next === 'crypto' || (next === 'gold' && goldUnit === 'oz')
+                    setCurrency(usd ? 'USD' : 'THB')
+                  }
                 }}
                 className={selectClass}
               >
@@ -321,9 +336,46 @@ function HoldingForm({
               </select>
             </div>
           </div>
+          {assetClass === 'gold' && (
+            <div className="flex flex-col gap-1.5">
+              <span id="holding-unit-label" className={labelClass}>
+                {t('Gold unit')}
+              </span>
+              <div className="flex gap-2" role="radiogroup" aria-labelledby="holding-unit-label">
+                {GOLD_UNITS.map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    role="radio"
+                    aria-checked={goldUnit === u}
+                    onClick={() => {
+                      if (goldUnit === u) return
+                      setGoldUnit(u)
+                      // Ounces are usually held in dollars, baht-weight in baht.
+                      if (!initial) setCurrency(u === 'oz' ? 'USD' : 'THB')
+                    }}
+                    className={
+                      'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
+                      (goldUnit === u
+                        ? 'bg-brand-600 text-white'
+                        : 'border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
+                    }
+                  >
+                    {GOLD_UNIT_META[u].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <Input
             id="holding-quantity"
-            label={assetClass === 'gold' ? t('Quantity (baht-weight)') : t('Quantity')}
+            label={
+              assetClass !== 'gold'
+                ? t('Quantity')
+                : goldUnit === 'oz'
+                  ? t('Quantity (troy oz)')
+                  : t('Quantity (baht-weight)')
+            }
             inputMode="decimal"
             placeholder="0"
             value={quantity}
@@ -352,9 +404,11 @@ function HoldingForm({
               <span className="text-sm text-[var(--color-ink)]">
                 {t('Update price automatically')}
                 <span className="block text-xs text-[var(--color-muted)]">
-                  {assetClass === 'gold'
-                    ? t('Estimated per baht-weight of 96.5% gold (in THB) from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.')
-                    : t('From the market each time you open Portfolio (delayed up to 15 min).')}
+                  {assetClass !== 'gold'
+                    ? t('From the market each time you open Portfolio (delayed up to 15 min).')
+                    : goldUnit === 'oz'
+                      ? t('World gold price per troy ounce (gold futures, delayed up to 15 min).')
+                      : t('Estimated per baht-weight of 96.5% gold from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.')}
                 </span>
               </span>
               <input
@@ -429,7 +483,7 @@ function HoldingRow({
           )}
         </p>
         <p className="tnum text-xs text-[var(--color-muted)]">
-          {quantityText(holding.quantity)} · {native(holding.price, holding.currency)}
+          {holdingQuantity(holding)} · {native(holding.price, holding.currency)}
           {holding.autoPrice && ` · ${priceAge(holding.priceUpdatedAt)}`}
         </p>
         {account ? (
@@ -456,6 +510,34 @@ function HoldingRow({
       </div>
     </button>
   )
+}
+
+/**
+ * Holdings grouped for the list: one section per asset class, except gold,
+ * which gets a section per unit (baht-weight and troy ounces don't add up).
+ */
+function holdingGroups(holdings: Holding[]) {
+  const groups: { key: string; title: string; total?: string; rows: Holding[] }[] = []
+  for (const assetClass of ASSET_CLASSES) {
+    const rows = holdings.filter((h) => h.assetClass === assetClass)
+    if (rows.length === 0) continue
+    if (assetClass !== 'gold') {
+      groups.push({ key: assetClass, title: ASSET_CLASS_META[assetClass].label, rows })
+      continue
+    }
+    for (const unit of GOLD_UNITS) {
+      const unitRows = rows.filter((h) => goldUnitOf(h) === unit)
+      if (unitRows.length === 0) continue
+      const qty = unitRows.reduce((sum, h) => sum + h.quantity, 0)
+      groups.push({
+        key: `gold-${unit}`,
+        title: `${ASSET_CLASS_META.gold.label} · ${GOLD_UNIT_META[unit].label}`,
+        total: t('{qty} total', { qty: holdingQuantity({ assetClass: 'gold', goldUnit: unit, quantity: qty }) }),
+        rows: unitRows,
+      })
+    }
+  }
+  return groups
 }
 
 function HoldingsTab({
@@ -562,16 +644,13 @@ function HoldingsTab({
           ))}
         </div>
       )}
-      {ASSET_CLASSES.map((assetClass) => {
-        const rows = sortHoldings(
-          portfolio.holdings.filter((h) => h.assetClass === assetClass),
-          sortBy,
-        )
-        if (rows.length === 0) return null
+      {holdingGroups(portfolio.holdings).map(({ key, title, total, rows: groupRows }) => {
+        const rows = sortHoldings(groupRows, sortBy)
         return (
-          <section key={assetClass} aria-label={ASSET_CLASS_META[assetClass].label} className="space-y-1.5">
-            <h2 className="px-1 text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-              {ASSET_CLASS_META[assetClass].label}
+          <section key={key} aria-label={title} className="space-y-1.5">
+            <h2 className="flex items-baseline justify-between gap-2 px-1 text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
+              <span>{title}</span>
+              {total && <span className="tnum normal-case tracking-normal">{total}</span>}
             </h2>
             <Card>
               <CardBody className="divide-y divide-[var(--color-line)] py-0">
