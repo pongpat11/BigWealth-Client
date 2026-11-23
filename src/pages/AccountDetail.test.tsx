@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { AccountDetail } from './AccountDetail'
 import * as accountsApi from '@/lib/accounts'
 import * as txApi from '@/lib/transactions'
@@ -46,11 +46,16 @@ const tx = (id: string, note: string): Transaction => ({
   labels: [],
 })
 
+function ListStub() {
+  const state = useLocation().state as { deleteAccountId?: string } | null
+  return <p>Accounts list{state?.deleteAccountId ? ` (delete ${state.deleteAccountId})` : ''}</p>
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/accounts" element={<p>Accounts list</p>} />
+        <Route path="/accounts" element={<ListStub />} />
         <Route path="/accounts/:id" element={<AccountDetail />} />
       </Routes>
     </MemoryRouter>,
@@ -69,7 +74,11 @@ describe('AccountDetail', () => {
     renderAt('/accounts/card')
 
     expect(await screen.findByRole('heading', { name: 'KBank Credit Card' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Balance' })).toHaveTextContent('Owed')
+    const balance = screen.getByRole('region', { name: 'Balance' })
+    expect(balance).toHaveTextContent('Owed')
+    // Shown as a positive amount owed, like the Debts page.
+    expect(balance).toHaveTextContent('฿32,500')
+    expect(balance).not.toHaveTextContent('-฿32,500')
     expect(screen.getByText('16% a year')).toBeInTheDocument()
     expect(screen.getByText('Dinner')).toBeInTheDocument()
     expect(txApi.listTransactionPage).toHaveBeenCalledWith({ accountId: 'card' }, undefined, 30)
@@ -89,6 +98,27 @@ describe('AccountDetail', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull()
   })
 
+  it('starts clean when switching to another account', async () => {
+    const other = { ...card, id: 'other', name: 'Car Loan' }
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([card, other])
+    vi.mocked(txApi.listTransactionPage)
+      .mockResolvedValueOnce({ items: [tx('t1', 'Dinner')], nextCursor: null })
+      .mockResolvedValueOnce({ items: [], nextCursor: null })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/accounts/card']}>
+        <Link to="/accounts/other">Go to other</Link>
+        <Routes>
+          <Route path="/accounts/:id" element={<AccountDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('Dinner')).toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: 'Go to other' }))
+    expect(await screen.findByRole('heading', { name: 'Car Loan' })).toBeInTheDocument()
+    expect(screen.queryByText('Dinner')).toBeNull()
+  })
+
   it('says so when the account no longer exists', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([])
     vi.mocked(txApi.listTransactionPage).mockResolvedValue({ items: [], nextCursor: null })
@@ -96,7 +126,7 @@ describe('AccountDetail', () => {
     expect(await screen.findByText(/doesn't exist anymore/i)).toBeInTheDocument()
   })
 
-  it('deletes the account from the edit form and returns to the list', async () => {
+  it('hands a delete over to the list (which offers Undo)', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([card])
     vi.mocked(accountsApi.deleteAccount).mockResolvedValue(undefined)
     vi.mocked(txApi.listTransactionPage).mockResolvedValue({ items: [], nextCursor: null })
@@ -105,7 +135,7 @@ describe('AccountDetail', () => {
 
     await user.click(await screen.findByRole('button', { name: /edit/i }))
     await user.click(screen.getByRole('button', { name: /delete/i }))
-    await waitFor(() => expect(accountsApi.deleteAccount).toHaveBeenCalledWith('card'))
-    expect(await screen.findByText('Accounts list')).toBeInTheDocument()
+    expect(await screen.findByText('Accounts list (delete card)')).toBeInTheDocument()
+    expect(accountsApi.deleteAccount).not.toHaveBeenCalled()
   })
 })

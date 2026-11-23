@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { Accounts } from './Accounts'
 import * as api from '@/lib/accounts'
 
@@ -138,6 +138,26 @@ describe('Accounts page', () => {
     await user.click(screen.getByRole('button', { name: /undo/i }))
 
     expect(screen.getByText('Wallet')).toBeInTheDocument()
+    expect(api.deleteAccount).not.toHaveBeenCalled()
+  })
+
+  it('runs a delete handed over from the detail screen with an Undo window', async () => {
+    vi.mocked(api.listAccounts).mockResolvedValue([savings, wallet])
+    vi.mocked(api.deleteAccount).mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={[{ pathname: '/accounts', state: { deleteAccountId: 'a2' } }]}>
+        <Routes>
+          <Route path="/accounts" element={<Accounts />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('SCB Savings')).toBeInTheDocument()
+    expect(screen.queryByText('Wallet')).toBeNull()
+    expect(api.deleteAccount).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+    expect(await screen.findByText('Wallet')).toBeInTheDocument()
     expect(api.deleteAccount).not.toHaveBeenCalled()
   })
 })

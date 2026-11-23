@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Landmark, Pencil, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
@@ -240,11 +240,30 @@ export function Accounts() {
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const undoable = useUndoableDelete()
+
+  // The detail screen deletes by coming back here with the account id in
+  // router state, so the delete gets the same Undo window as one made here.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const handedOverId = useRef(
+    (location.state as { deleteAccountId?: string } | null)?.deleteAccountId,
+  )
 
   useEffect(() => {
     let active = true
     listAccounts()
-      .then((rows) => active && setItems(rows))
+      .then((rows) => {
+        if (!active) return
+        setItems(rows)
+        const toDelete = handedOverId.current
+        if (!toDelete) return
+        handedOverId.current = undefined
+        // Drop the state so a reload or back/forward doesn't delete again.
+        navigate('.', { replace: true, state: null })
+        const index = rows.findIndex((a) => a.id === toDelete)
+        if (index >= 0) handleDelete(rows[index], index)
+      })
       .catch(
         (err) =>
           active &&
@@ -253,6 +272,7 @@ export function Accounts() {
     return () => {
       active = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, [])
 
   const netWorth = useMemo(
@@ -277,11 +297,11 @@ export function Accounts() {
     })
   }
 
-  const undoable = useUndoableDelete()
-
-  function handleDelete(account: Account) {
+  function handleDelete(
+    account: Account,
+    index = (items ?? []).findIndex((a) => a.id === account.id),
+  ) {
     setEditingId(null)
-    const index = (items ?? []).findIndex((a) => a.id === account.id)
     undoable.remove({
       message: `Deleted “${account.name}”`,
       hide: () => setItems((list) => (list ?? []).filter((a) => a.id !== account.id)),

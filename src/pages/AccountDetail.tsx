@@ -6,7 +6,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { Sheet } from '@/components/ui/Sheet'
 import { ApiError } from '@/lib/api'
-import { deleteAccount, listAccounts, type Account } from '@/lib/accounts'
+import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDateTime } from '@/lib/format'
 import { listTransactionPage, type Transaction } from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
@@ -53,6 +53,10 @@ function TxRow({ tx }: { tx: Transaction }) {
 /** One account: balance, details and its transactions, newest first. */
 export function AccountDetail() {
   const { id = '' } = useParams()
+  return <AccountDetailView key={id} id={id} />
+}
+
+function AccountDetailView({ id }: { id: string }) {
   const navigate = useNavigate()
   const [account, setAccount] = useState<Account | null | undefined>(undefined)
   const [txs, setTxs] = useState<Transaction[]>([])
@@ -93,14 +97,10 @@ export function AccountDetail() {
     }
   }
 
-  async function handleDelete() {
+  // The list does the delete, with its Undo window and error toast.
+  function handleDelete() {
     if (!account) return
-    try {
-      await deleteAccount(account.id)
-      navigate('/accounts', { replace: true })
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not delete this account.')
-    }
+    navigate('/accounts', { replace: true, state: { deleteAccountId: account.id } })
   }
 
   const back = (
@@ -218,7 +218,7 @@ export function AccountDetail() {
             (isDebt ? 'text-[var(--color-loss)]' : 'text-[var(--color-ink)]')
           }
         >
-          {formatMoney(isDebt ? -account.currentBalance : account.currentBalance, account.currency)}
+          {formatMoney(account.currentBalance, account.currency)}
         </p>
         <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {details.map(([k, v]) => (
