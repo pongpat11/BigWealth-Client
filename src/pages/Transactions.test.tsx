@@ -278,6 +278,41 @@ describe('Transactions page', () => {
     expect(await screen.findByText(/Nowhere → KBank Savings/)).toBeInTheDocument()
   })
 
+  it('matches the currency to an account carried over into a transfer', async () => {
+    const ibkr = { ...kbank, id: 'ibkr', name: 'IBKR', institution: null, currency: 'USD' as const }
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank, ibkr])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.selectOptions(await screen.findByLabelText(/account \(optional\)/i), 'ibkr')
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^transfer$/i }))
+
+    const currency = screen.getByLabelText('Currency')
+    expect(currency).toHaveValue('USD')
+    expect(currency).toBeDisabled()
+  })
+
+  it('shows a transfer as money in or out when the list is filtered to an account', async () => {
+    const transfer = {
+      ...sample,
+      type: 'transfer' as const,
+      note: 'ATM',
+      categoryId: null,
+      category: null,
+      accountId: 'kbank',
+      account: { id: 'kbank', name: 'KBank Savings', type: 'bank' as const },
+      toAccountId: 'cash',
+      toAccount: { id: 'cash', name: 'Cash Wallet', type: 'cash' as const },
+    }
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([transfer]))
+    renderPage('/transactions?account=cash')
+    const row = await screen.findByRole('button', { name: /ATM/ })
+    expect(row).toHaveTextContent('+')
+  })
+
   it('selects an account in the form and includes it when saving', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
     vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))

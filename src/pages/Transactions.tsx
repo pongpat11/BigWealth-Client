@@ -118,9 +118,16 @@ function TransactionForm({
   )
   // Balances don't convert currencies, so a transfer stays within one currency.
   const fromAccount = accounts.find((a) => a.id === accountId)
+  const toAccount = accounts.find((a) => a.id === toAccountId)
+  // The chosen destination always stays listed, even if it no longer fits (its
+  // currency changed since), so the form never shows "Nowhere" for it.
   const toOptions = accounts.filter(
-    (a) => a.id !== accountId && (!fromAccount || a.currency === fromAccount.currency),
+    (a) =>
+      a.id === toAccountId ||
+      (a.id !== accountId && (!fromAccount || a.currency === fromAccount.currency)),
   )
+  // A transfer's currency follows its account(s); it can't be picked separately.
+  const currencyLocked = isTransfer && Boolean(fromAccount || toAccount)
 
   // '' on either side means "Nowhere": money from / to outside your accounts.
   function matchCurrency(account: Account | undefined) {
@@ -164,6 +171,10 @@ function TransactionForm({
       }
       if (accountId === toAccountId) {
         setError(t('Pick two different accounts.'))
+        return
+      }
+      if ([fromAccount, toAccount].some((a) => a && a.currency !== currency)) {
+        setError(t('Both accounts must be in the same currency.'))
         return
       }
     } else if (!categoryId) {
@@ -224,6 +235,8 @@ function TransactionForm({
                   setCategoryId('')
                   setSubCategoryId('')
                   if (opt.value !== 'transfer') setToAccountId('')
+                  // An account carried over from income/expense sets the currency.
+                  else matchCurrency(fromAccount)
                 }}
                 className={
                   'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
@@ -259,7 +272,8 @@ function TransactionForm({
                 id="currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value as Currency)}
-                className={selectClass + ' mt-1.5'}
+                disabled={currencyLocked}
+                className={selectClass + ' mt-1.5 disabled:opacity-60'}
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
@@ -454,10 +468,23 @@ function TransactionForm({
   )
 }
 
-function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transaction) => void }) {
+function TransactionRow({
+  tx,
+  onEdit,
+  viewAccountId,
+}: {
+  tx: Transaction
+  onEdit: (t: Transaction) => void
+  /** The account the list is filtered to, if any: gives a transfer its direction. */
+  viewAccountId?: string
+}) {
   const cat = tx.category
   const isTransfer = tx.type === 'transfer'
-  const positive = tx.type === 'income'
+  // Seen from one account, a transfer is money in (destination) or out (source).
+  const transferIn = isTransfer && !!viewAccountId && tx.toAccountId === viewAccountId
+  const transferOut = isTransfer && !!viewAccountId && tx.accountId === viewAccountId
+  const directional = !isTransfer || transferIn || transferOut
+  const positive = tx.type === 'income' || transferIn
   const categoryLabel = isTransfer
     ? t('Transfer')
     : tx.subCategory
@@ -514,12 +541,12 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
           'tnum shrink-0 text-sm font-semibold ' +
           (positive
             ? 'text-[var(--color-gain)]'
-            : isTransfer
-              ? 'text-[var(--color-muted)]'
-              : 'text-[var(--color-ink)]')
+            : directional
+              ? 'text-[var(--color-ink)]'
+              : 'text-[var(--color-muted)]')
         }
       >
-        {isTransfer ? '' : positive ? '+' : '−'}
+        {!directional ? '' : positive ? '+' : '−'}
         {formatMoney(tx.amount, tx.currency)}
       </span>
     </button>
@@ -945,6 +972,7 @@ export function Transactions() {
                   <TransactionRow
                     key={tx.id}
                     tx={tx}
+                    viewAccountId={accountId || undefined}
                     onEdit={(t) => {
                       setEditing(t)
                       setFormOpen(true)

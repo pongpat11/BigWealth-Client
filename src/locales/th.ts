@@ -70,6 +70,7 @@ export const th: Record<string, string> = {
   Nowhere: 'ภายนอก',
   'Nowhere (outside your accounts)': 'ภายนอก (ไม่ใช่บัญชีของคุณ)',
   'Pick two different accounts.': 'เลือกบัญชีที่ต่างกัน',
+  'Both accounts must be in the same currency.': 'บัญชีต้องใช้สกุลเงินเดียวกับรายการ',
   Amount: 'จำนวนเงิน',
   Currency: 'สกุลเงิน',
   Type: 'ประเภท',

@@ -342,6 +342,22 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       accounts = accounts.filter((x) => x.id !== param)
+      // As on the server: a transfer left with no account at all goes too; other
+      // transactions just lose the account.
+      transactions = transactions
+        .filter(
+          (t) =>
+            !(
+              t.type === 'transfer' &&
+              ((t.accountId === param && !t.toAccountId) ||
+                (t.toAccountId === param && !t.accountId))
+            ),
+        )
+        .map((t) => ({
+          ...t,
+          ...(t.accountId === param && { accountId: null, account: null }),
+          ...(t.toAccountId === param && { toAccountId: null, toAccount: null }),
+        }))
       // ON DELETE SET NULL, as on the server.
       holdings = holdings.map((h) => (h.accountId === param ? { ...h, accountId: null } : h))
       dividendRows = dividendRows.map((d) => (d.accountId === param ? { ...d, accountId: null } : d))
@@ -525,12 +541,14 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     for (const t of transactions) {
       const k = key(new Date(t.date))
       if (t.type === 'transfer') {
-        // Between own accounts: no net change. To/from nowhere: moves net worth.
-        if (t.accountId && t.toAccountId) continue
-        const side = accounts.find((a) => a.id === (t.toAccountId ?? t.accountId))
-        if (side && side.currency === t.currency) {
-          flow.set(k, (flow.get(k) ?? 0) + (t.toAccountId ? t.amount : -t.amount))
-        }
+        // Each side on its own, as balances do: nets to zero between own
+        // accounts; to/from nowhere it moves net worth.
+        const from = accounts.find((a) => a.id === t.accountId)
+        const to = accounts.find((a) => a.id === t.toAccountId)
+        let f = 0
+        if (from && from.currency === t.currency) f -= t.amount
+        if (to && to.currency === t.currency) f += t.amount
+        if (f !== 0) flow.set(k, (flow.get(k) ?? 0) + f)
         continue
       }
       const signed = t.type === 'income' ? t.amount : -t.amount
