@@ -1,8 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Transactions } from './Transactions'
+import { QuickAddProvider } from '@/components/QuickAdd'
+import { announceTransactionChange } from '@/lib/transactionEvents'
 import * as api from '@/lib/transactions'
 import * as labelsApi from '@/lib/labels'
 import * as categoriesApi from '@/lib/categories'
@@ -91,6 +93,40 @@ describe('Transactions page', () => {
     vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
     renderPage()
     expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
+  })
+
+  it('opens quick add from Add inside the app shell', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/transactions']}>
+        <QuickAddProvider onChange={() => {}}>
+          <Transactions />
+        </QuickAddProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText(/no transactions yet/i)
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    expect(await screen.findByRole('dialog', { name: 'Quick add' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'New transaction' })).not.toBeInTheDocument()
+  })
+
+  it('updates the list in place after a quick add and its Undo', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([sample]))
+    renderPage()
+    await screen.findByText('Lunch — som tam')
+    const added = { ...sample, id: '9', note: 'Iced latte' }
+    let handled = false
+    act(() => {
+      handled = announceTransactionChange({ kind: 'created', tx: added })
+    })
+    expect(handled).toBe(true)
+    expect(screen.getByText('Iced latte')).toBeInTheDocument()
+    act(() => {
+      announceTransactionChange({ kind: 'deleted', tx: added })
+    })
+    expect(screen.queryByText('Iced latte')).not.toBeInTheDocument()
+    expect(api.listTransactionPage).toHaveBeenCalledTimes(1)
   })
 
   it('adds a transaction with a categoryId and timezone', async () => {

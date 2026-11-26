@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
 import { t } from '@/lib/i18n'
 import { runRecurring } from '@/lib/recurring'
+import { QuickAddProvider } from '@/components/QuickAdd'
 import { ErrorBoundary } from './ErrorBoundary'
 import { OfflineBanner } from './OfflineBanner'
 
@@ -101,6 +102,10 @@ function TabLink({
   )
 }
 
+// Screens that show no transaction data: a quick add there needs no reload
+// (which would also drop anything typed into their inline forms).
+const NO_TRANSACTION_DATA = new Set(['/categories', '/labels', '/settings', '/more'])
+
 /**
  * Authenticated app layout: desktop sidebar (lg+) and mobile bottom tab bar,
  * per docs/DESIGN_SPEC.md §6 "Navigation". Content renders via <Outlet/>.
@@ -160,14 +165,21 @@ export function AppShell() {
         </button>
       </aside>
 
-      {/* Content */}
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-8 lg:pt-6">
-        <OfflineBanner />
-        {/* Keyed by path so a crashed screen clears when you navigate away. */}
-        <ErrorBoundary key={`${pathname}#${dataVersion}`}>
-          <Outlet />
-        </ErrorBoundary>
-      </main>
+      {/* Content. After a quick add, a screen showing transaction data
+          reloads unless it updated itself in place. */}
+      <QuickAddProvider
+        onChange={() => {
+          if (!NO_TRANSACTION_DATA.has(pathname)) setDataVersion((v) => v + 1)
+        }}
+      >
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6">
+          <OfflineBanner />
+          {/* Keyed by path so a crashed screen clears when you navigate away. */}
+          <ErrorBoundary key={`${pathname}#${dataVersion}`}>
+            <Outlet />
+          </ErrorBoundary>
+        </main>
+      </QuickAddProvider>
 
       {/* Mobile bottom tab bar */}
       <nav
