@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Plus, Repeat, Search, SlidersHorizontal } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Plus, Repeat, Search, SlidersHorizontal, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
@@ -771,22 +771,31 @@ export function Transactions() {
       <PageHeader
         title={t('Transactions')}
         action={
-          <Button
-            size="sm"
-            onClick={() => {
-              if (quickAdd) {
-                quickAdd()
-              } else if (formOpen && editing === null) {
-                closeForm()
-              } else {
-                setEditing(null)
-                setFormOpen(true)
-              }
-            }}
-          >
-            <Plus size={16} aria-hidden />
-            {t('Add')}
-          </Button>
+          <div className="flex gap-2">
+            <Link
+              to="/transactions/import"
+              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 text-xs font-medium text-[var(--color-ink)] hover:bg-[var(--color-line)]"
+            >
+              <Upload size={16} aria-hidden />
+              {t('Import')}
+            </Link>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (quickAdd) {
+                  quickAdd()
+                } else if (formOpen && editing === null) {
+                  closeForm()
+                } else {
+                  setEditing(null)
+                  setFormOpen(true)
+                }
+              }}
+            >
+              <Plus size={16} aria-hidden />
+              {t('Add')}
+            </Button>
+          </div>
         }
       />
 

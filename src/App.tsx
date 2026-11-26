@@ -17,6 +17,7 @@ import { Recurring } from '@/pages/Recurring'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
+import { ImportTransactions } from '@/pages/ImportTransactions'
 
 // Every app screen requires a session (RequireAuth). Unauthenticated visitors
 // are redirected to /login and returned to their target after signing in.
@@ -28,6 +29,7 @@ function App() {
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/transactions/import" element={<ImportTransactions />} />
           <Route path="/categories" element={<Categories />} />
           <Route path="/labels" element={<Labels />} />
           <Route path="/portfolio" element={<Portfolio />} />
