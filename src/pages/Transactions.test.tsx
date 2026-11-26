@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Transactions } from './Transactions'
+import { QuickAddProvider } from '@/components/QuickAdd'
 import * as api from '@/lib/transactions'
 import * as labelsApi from '@/lib/labels'
 import * as categoriesApi from '@/lib/categories'
@@ -91,6 +92,22 @@ describe('Transactions page', () => {
     vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
     renderPage()
     expect(await screen.findByText(/no transactions yet/i)).toBeInTheDocument()
+  })
+
+  it('opens quick add from Add inside the app shell', async () => {
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/transactions']}>
+        <QuickAddProvider onChange={() => {}}>
+          <Transactions />
+        </QuickAddProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText(/no transactions yet/i)
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    expect(await screen.findByRole('dialog', { name: 'Quick add' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'New transaction' })).not.toBeInTheDocument()
   })
 
   it('adds a transaction with a categoryId and timezone', async () => {

@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icon'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DeleteButton } from '@/components/ui/DeleteButton'
 import { Sheet } from '@/components/ui/Sheet'
+import { useQuickAdd } from '@/components/QuickAdd'
 import { useUndoableDelete } from '@/lib/useUndoableDelete'
 import {
   browserTimezone,
@@ -613,6 +614,9 @@ export function Transactions() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Adding goes through the app-wide quick-add sheet; the full form below is
+  // for editing (and for adding when the page renders outside the app shell).
+  const quickAdd = useQuickAdd()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -762,7 +766,9 @@ export function Transactions() {
           <Button
             size="sm"
             onClick={() => {
-              if (formOpen && editing === null) {
+              if (quickAdd) {
+                quickAdd()
+              } else if (formOpen && editing === null) {
                 closeForm()
               } else {
                 setEditing(null)

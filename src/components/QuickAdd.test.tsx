@@ -1,10 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { QuickAdd } from './QuickAdd'
+import { QuickAddProvider as QuickAdd, useQuickAdd } from './QuickAdd'
 import * as api from '@/lib/transactions'
 import * as categoriesApi from '@/lib/categories'
 import * as accountsApi from '@/lib/accounts'
+import * as labelsApi from '@/lib/labels'
 
 vi.mock('@/lib/transactions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/transactions')>()),
@@ -14,6 +15,7 @@ vi.mock('@/lib/transactions', async (importOriginal) => ({
 }))
 vi.mock('@/lib/categories', () => ({ listCategories: vi.fn() }))
 vi.mock('@/lib/accounts', () => ({ listAccounts: vi.fn() }))
+vi.mock('@/lib/labels', () => ({ listLabels: vi.fn() }))
 
 const account = (id: string, name: string) => ({
   id,
@@ -76,6 +78,9 @@ describe('QuickAdd', () => {
       amount: input.amount,
     }))
     vi.mocked(api.deleteTransaction).mockResolvedValue()
+    vi.mocked(labelsApi.listLabels).mockResolvedValue([
+      { id: 'work', name: 'Work', color: '#2563eb', isDefault: false },
+    ])
   })
 
   it('saves an expense from the keypad with the most used account preselected', async () => {
@@ -144,5 +149,47 @@ describe('QuickAdd', () => {
         expect.objectContaining({ amount: 45.5, categoryId: 'food' }),
       ),
     )
+  })
+
+  it('adds labels and switches currency when no account is picked', async () => {
+    const user = userEvent.setup()
+    render(<QuickAdd onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    await user.click(await screen.findByRole('button', { name: 'Food' }))
+    await user.click(screen.getByRole('button', { name: 'No account' }))
+    await user.click(screen.getByRole('button', { name: 'Currency' }))
+    await user.click(screen.getByRole('button', { name: '9' }))
+    expect(screen.getByRole('status', { name: 'Amount' })).toHaveTextContent('$9')
+    await user.click(screen.getByRole('button', { name: 'Labels' }))
+    await user.click(screen.getByRole('button', { name: 'Work' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ currency: 'USD', accountId: undefined, labelIds: ['work'] }),
+      ),
+    )
+  })
+
+  it('hides the currency switch when an account sets it', async () => {
+    const user = userEvent.setup()
+    render(<QuickAdd onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    expect(await screen.findByRole('button', { name: 'KBank' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: 'Currency' })).not.toBeInTheDocument()
+  })
+
+  it('opens from any screen through useQuickAdd', async () => {
+    function Screen() {
+      const open = useQuickAdd()
+      return <button onClick={() => open?.()}>Add</button>
+    }
+    const user = userEvent.setup()
+    render(
+      <QuickAdd onChange={() => {}}>
+        <Screen />
+      </QuickAdd>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    expect(await screen.findByRole('dialog', { name: 'Quick add' })).toBeInTheDocument()
   })
 })
