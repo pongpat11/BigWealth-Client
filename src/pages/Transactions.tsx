@@ -10,6 +10,7 @@ import { DeleteButton } from '@/components/ui/DeleteButton'
 import { Sheet } from '@/components/ui/Sheet'
 import { useQuickAdd } from '@/components/QuickAdd'
 import { useUndoableDelete } from '@/lib/useUndoableDelete'
+import { useTransactionChanges } from '@/lib/transactionEvents'
 import {
   browserTimezone,
   formatDayHeading,
@@ -738,6 +739,13 @@ export function Transactions() {
     })
     closeForm()
   }
+
+  // Quick add (and its Undo) update the list in place, keeping loaded pages
+  // and the scroll position.
+  useTransactionChanges((change) => {
+    if (change.kind === 'created') handleSaved(change.tx)
+    else setItems((prev) => prev && prev.filter((t) => t.id !== change.tx.id))
+  })
 
   const undoable = useUndoableDelete()
 

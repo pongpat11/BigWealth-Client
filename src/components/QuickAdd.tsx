@@ -45,6 +45,7 @@ import {
   type TransactionInput,
   type TransactionKind,
 } from '@/lib/transactions'
+import { announceTransactionChange } from '@/lib/transactionEvents'
 import { UNDO_MS } from '@/lib/useUndoableDelete'
 import { cn } from '@/lib/utils'
 
@@ -187,10 +188,17 @@ export function QuickAddSheet({
 
   // Until you pick one, the account follows your last choice / most used.
   const effectiveAccountId = accountId ?? defaultAccountId(prefs, type, rankedAccounts)
-  const effectiveToAccountId =
-    toAccountId ??
-    (prefs.toAccount && accounts.some((a) => a.id === prefs.toAccount) ? prefs.toAccount : '')
   const fromAccount = accounts.find((a) => a.id === effectiveAccountId)
+  // The remembered destination only applies when it still fits the source:
+  // another account, in the same currency.
+  const rememberedTo = accounts.find((a) => a.id === prefs.toAccount)
+  const defaultToAccountId =
+    rememberedTo &&
+    rememberedTo.id !== effectiveAccountId &&
+    (!fromAccount || rememberedTo.currency === fromAccount.currency)
+      ? rememberedTo.id
+      : ''
+  const effectiveToAccountId = toAccountId ?? defaultToAccountId
   const toAccount = isTransfer ? accounts.find((a) => a.id === effectiveToAccountId) : undefined
   const accountCurrency = asCurrency(fromAccount?.currency) ?? asCurrency(toAccount?.currency)
   const currency: Currency = accountCurrency ?? freeCurrency
@@ -271,7 +279,13 @@ export function QuickAddSheet({
     })
   }
 
+  // A ref, not just state: two taps before the next render both see
+  // `saving === false`, and would save the entry twice.
+  const savingRef = useRef(false)
+
   async function send(input: TransactionInput) {
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     setError(null)
     try {
@@ -280,13 +294,14 @@ export function QuickAddSheet({
       onCreated(saved)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('Could not save. Try again.'))
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (saving) return
+    if (savingRef.current) return
     const value = Number(amount)
     if (!amount || !(value > 0)) {
       setError(t('Enter an amount greater than 0.'))
@@ -311,6 +326,14 @@ export function QuickAddSheet({
         setError(t('Pick an account on at least one side.'))
         return
       }
+      if (effectiveAccountId && effectiveAccountId === effectiveToAccountId) {
+        setError(t('Pick two different accounts.'))
+        return
+      }
+      if (fromAccount && toAccount && fromAccount.currency !== toAccount.currency) {
+        setError(t('Both accounts must be in the same currency.'))
+        return
+      }
       void send({
         ...common,
         accountId: effectiveAccountId || undefined,
@@ -331,7 +354,6 @@ export function QuickAddSheet({
   }
 
   function repeat(entry: FrequentEntry) {
-    if (saving) return
     void send(entryToInput(entry, new Date(), browserTimezone()))
   }
 
@@ -667,8 +689,8 @@ export function useQuickAdd(): (() => void) | null {
 /**
  * Owns the quick-add flow for the app: the floating + button (every screen),
  * the sheet, and a toast with Undo for the entry just saved. Screens open it
- * with `useQuickAdd()`. `onChange` runs whenever data changed so the screen
- * on show can reload.
+ * with `useQuickAdd()`. A screen that listens with `useTransactionChanges`
+ * updates itself in place; otherwise `onChange` runs so the screen can reload.
  */
 export function QuickAddProvider({
   onChange,
@@ -693,14 +715,14 @@ export function QuickAddProvider({
   function created(tx: Transaction) {
     setOpen(false)
     setToast({ id: ++nextId.current, tx })
-    onChange()
+    if (!announceTransactionChange({ kind: 'created', tx })) onChange()
   }
 
   async function undo(tx: Transaction) {
     setToast(null)
     try {
       await deleteTransaction(tx.id)
-      onChange()
+      if (!announceTransactionChange({ kind: 'deleted', tx })) onChange()
     } catch (err) {
       const reason = err instanceof ApiError ? err.message : t('Try again.')
       setToast({ id: ++nextId.current, error: t("Couldn't undo. {reason}", { reason }) })
@@ -710,17 +732,21 @@ export function QuickAddProvider({
   return (
     <QuickAddContext.Provider value={openSheet}>
       {children}
-      {/* Hidden while its toast shows: they share the bottom-right corner. */}
-      {!toast && (
-        <button
-          type="button"
-          aria-label={t('Quick add')}
-          onClick={openSheet}
-          className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] right-4 z-30 flex size-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-transform hover:bg-brand-700 active:scale-95 lg:bottom-8 lg:right-8"
-        >
-          <Plus size={26} aria-hidden />
-        </button>
-      )}
+      {/* Lifts above its toast (they share the bottom-right corner) so the
+          next entry can start straight away. */}
+      <button
+        type="button"
+        aria-label={t('Quick add')}
+        onClick={openSheet}
+        className={cn(
+          'fixed right-4 z-30 flex size-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-[bottom,transform] hover:bg-brand-700 active:scale-95 lg:right-8',
+          toast
+            ? 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))] lg:bottom-24'
+            : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-8',
+        )}
+      >
+        <Plus size={26} aria-hidden />
+      </button>
       {open && <QuickAddSheet onClose={() => setOpen(false)} onCreated={created} />}
       {toast &&
         ('tx' in toast ? (

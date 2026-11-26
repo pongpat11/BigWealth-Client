@@ -97,6 +97,11 @@ describe('frequentEntries', () => {
     expect(frequentEntries(history)).toEqual([])
   })
 
+  it('leaves out entries a recurring rule created', () => {
+    const rent = { amount: 12000, note: 'Rent', recurringRuleId: 'rule-1' }
+    expect(frequentEntries([tx(rent), tx(rent)])).toEqual([])
+  })
+
   it('keeps transfers', () => {
     const t1 = { type: 'transfer' as const, categoryId: null, category: null, toAccountId: 'cash', note: null }
     expect(frequentEntries([tx(t1), tx(t1)])).toHaveLength(1)

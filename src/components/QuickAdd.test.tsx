@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuickAddProvider as QuickAdd, useQuickAdd } from './QuickAdd'
@@ -6,6 +6,8 @@ import * as api from '@/lib/transactions'
 import * as categoriesApi from '@/lib/categories'
 import * as accountsApi from '@/lib/accounts'
 import * as labelsApi from '@/lib/labels'
+import { saveQuickAddPrefs } from '@/lib/quickAdd'
+import { useTransactionChanges, type TransactionChange } from '@/lib/transactionEvents'
 
 vi.mock('@/lib/transactions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/transactions')>()),
@@ -191,5 +193,73 @@ describe('QuickAdd', () => {
     )
     await user.click(screen.getByRole('button', { name: 'Add' }))
     expect(await screen.findByRole('dialog', { name: 'Quick add' })).toBeInTheDocument()
+  })
+
+  it("doesn't default a transfer to the same account on both sides", async () => {
+    // Remembered: KBank as the source, and KBank as the last destination
+    // (e.g. after the old source was deleted).
+    saveQuickAddPrefs({ type: 'transfer', account: { transfer: 'kbank' }, toAccount: 'kbank' })
+    const user = userEvent.setup()
+    render(<QuickAdd onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    const from = await screen.findAllByRole('button', { name: 'KBank' })
+    expect(from[0]).toHaveAttribute('aria-pressed', 'true')
+    // To falls back to Nowhere instead of KBank → KBank.
+    const nowhere = screen.getAllByRole('button', { name: 'Nowhere' })
+    expect(nowhere[nowhere.length - 1]).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: '5' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'transfer', accountId: 'kbank', toAccountId: undefined }),
+      ),
+    )
+  })
+
+  it('saves a frequent entry once even when tapped twice quickly', async () => {
+    let finish: (tx: api.Transaction) => void = () => {}
+    vi.mocked(api.createTransaction).mockImplementation(
+      () => new Promise((resolve) => (finish = resolve)),
+    )
+    const user = userEvent.setup()
+    render(<QuickAdd onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    const fav = await screen.findByRole('button', { name: /Add Latte ฿65 again/ })
+    act(() => {
+      fav.click()
+      fav.click()
+    })
+    await act(async () => finish({ ...latte, id: 'new' }))
+    expect(api.createTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the + button available while the Undo toast shows', async () => {
+    const user = userEvent.setup()
+    render(<QuickAdd onChange={() => {}} />)
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    await user.click(await screen.findByRole('button', { name: /Add Latte ฿65 again/ }))
+    await screen.findByRole('button', { name: 'Undo' })
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    expect(await screen.findByRole('dialog', { name: 'Quick add' })).toBeInTheDocument()
+  })
+
+  it('lets a listening screen update in place instead of reloading', async () => {
+    const changes: TransactionChange[] = []
+    function Screen() {
+      useTransactionChanges((c) => changes.push(c))
+      return null
+    }
+    const onChange = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <QuickAdd onChange={onChange}>
+        <Screen />
+      </QuickAdd>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Quick add' }))
+    await user.click(await screen.findByRole('button', { name: /Add Latte ฿65 again/ }))
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(changes.map((c) => c.kind)).toEqual(['created', 'deleted']))
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

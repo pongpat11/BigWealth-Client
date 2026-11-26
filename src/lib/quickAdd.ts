@@ -74,7 +74,7 @@ function entryKey(tx: Transaction): string {
 
 /**
  * Entries you record again and again (same type, amount, category, account and
- * note), most repeated first, ties broken by the most recent. `history` is
+ * note), most repeated first, leaving out what recurring rules create, ties broken by the most recent. `history` is
  * newest-first.
  */
 export function frequentEntries(history: Transaction[], max = MAX_FREQUENT): FrequentEntry[] {
@@ -82,6 +82,8 @@ export function frequentEntries(history: Transaction[], max = MAX_FREQUENT): Fre
   for (const tx of history) {
     if (tx.currency !== 'THB' && tx.currency !== 'USD') continue
     if (tx.type !== 'transfer' && !tx.categoryId) continue
+    // A recurring rule already records these; repeating one would double it.
+    if (tx.recurringRuleId) continue
     const key = entryKey(tx)
     const found = groups.get(key)
     if (found) {
