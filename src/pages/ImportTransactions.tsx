@@ -11,11 +11,13 @@ import {
   CSV_TEMPLATE,
   IMPORT_FIELDS,
   MAX_IMPORT_ROWS,
+  decodeCsv,
   guessColumns,
   importTransactions,
-  parseCsv,
+  parseCsvRows,
   prepareRows,
   type ColumnMap,
+  type CsvRow,
   type ImportField,
   type ImportRowError,
 } from '@/lib/csvImport'
@@ -44,7 +46,9 @@ const TYPE_LABELS = { income: t('Income'), expense: t('Expense'), transfer: t('T
 const PREVIEW_ROWS = 50
 
 function downloadTemplate() {
-  const blob = new Blob([String.fromCharCode(0xfeff) + CSV_TEMPLATE], { type: 'text/csv;charset=utf-8' })
+  const blob = new Blob([String.fromCharCode(0xfeff) + CSV_TEMPLATE], {
+    type: 'text/csv;charset=utf-8',
+  })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -62,11 +66,13 @@ export function ImportTransactions() {
 
   const [fileName, setFileName] = useState('')
   const [header, setHeader] = useState<string[]>([])
-  const [dataRows, setDataRows] = useState<string[][]>([])
+  const [dataRows, setDataRows] = useState<CsvRow[]>([])
   const [columns, setColumns] = useState<ColumnMap | null>(null)
   const [expenseCategoryId, setExpenseCategoryId] = useState('')
   const [incomeCategoryId, setIncomeCategoryId] = useState('')
   const [accountId, setAccountId] = useState('')
+  // '' = detect from the file; otherwise the order of slash dates.
+  const [dateOrder, setDateOrder] = useState<'' | 'dmy' | 'mdy'>('')
 
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,15 +95,16 @@ export function ImportTransactions() {
     if (!file) return
     setError(null)
     setImported(null)
-    const rows = parseCsv(await file.text())
+    const rows = parseCsvRows(decodeCsv(await file.arrayBuffer()))
     if (rows.length < 2) {
       setError(t('The file has no rows to import.'))
       return
     }
     setFileName(file.name)
-    setHeader(rows[0])
+    setHeader(rows[0].cells)
     setDataRows(rows.slice(1))
-    setColumns(guessColumns(rows[0]))
+    setColumns(guessColumns(rows[0].cells))
+    setDateOrder('')
   }
 
   const prepared = useMemo(
@@ -108,10 +115,25 @@ export function ImportTransactions() {
             columns,
             categories,
             accounts,
-            { expenseCategoryId, incomeCategoryId, accountId, timezone: browserTimezone() },
+            {
+              expenseCategoryId,
+              incomeCategoryId,
+              accountId,
+              timezone: browserTimezone(),
+              dayFirst: dateOrder === '' ? undefined : dateOrder === 'dmy',
+            },
           )
         : [],
-    [columns, dataRows, categories, accounts, expenseCategoryId, incomeCategoryId, accountId],
+    [
+      columns,
+      dataRows,
+      categories,
+      accounts,
+      expenseCategoryId,
+      incomeCategoryId,
+      accountId,
+      dateOrder,
+    ],
   )
   const ready = prepared.filter((r) => r.ok)
   const problems = prepared.filter((r) => !r.ok)
@@ -243,6 +265,21 @@ export function ImportTransactions() {
                     </select>
                   </div>
                 ))}
+                <div>
+                  <label htmlFor="date-order" className={labelClass}>
+                    {t('Date order')}
+                  </label>
+                  <select
+                    id="date-order"
+                    value={dateOrder}
+                    onChange={(e) => setDateOrder(e.target.value as '' | 'dmy' | 'mdy')}
+                    className={selectClass + ' mt-1.5'}
+                  >
+                    <option value="">{t('Detect')}</option>
+                    <option value="dmy">{t('Day/Month/Year')}</option>
+                    <option value="mdy">{t('Month/Day/Year')}</option>
+                  </select>
+                </div>
               </div>
 
               <p className="pt-2 text-sm font-semibold text-[var(--color-ink)]">

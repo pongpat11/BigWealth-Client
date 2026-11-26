@@ -11,24 +11,52 @@ import type { Currency, TransactionInput, TransactionKind } from './transactions
 /** Rows the server takes in one import (all or nothing). */
 export const MAX_IMPORT_ROWS = 1000
 
+/** Largest amount the server stores (Decimal(14, 2)). */
+export const MAX_AMOUNT = 999_999_999_999.99
+
 // ---------------------------------------------------------------------------
 // Parsing
 
 /**
- * Split CSV text into rows of cells (RFC 4180 quoting). Strips a BOM, picks
- * the delimiter (comma, semicolon or tab) from the first line, and drops
- * blank lines.
+ * File bytes → text. UTF-8 when the bytes are valid UTF-8; otherwise
+ * Windows-874 (Thai), which Excel on Thai Windows and many Thai banks use.
  */
+export function decodeCsv(bytes: ArrayBuffer | Uint8Array): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder('windows-874').decode(bytes)
+  }
+}
+
+export interface CsvRow {
+  cells: string[]
+  /** 1-based line in the file where the row starts. */
+  line: number
+}
+
+/** Split CSV text into rows of cells. See parseCsvRows. */
 export function parseCsv(text: string): string[][] {
+  return parseCsvRows(text).map((r) => r.cells)
+}
+
+/**
+ * Split CSV text into rows of cells (RFC 4180 quoting), keeping the file line
+ * each row starts on. Strips a BOM, picks the delimiter (comma, semicolon or
+ * tab) from the first line, and drops blank lines.
+ */
+export function parseCsvRows(text: string): CsvRow[] {
   const src = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
   const firstLine = src.split(/\r?\n/, 1)[0] ?? ''
   const delimiter = [',', ';', '\t'].reduce((best, d) =>
     firstLine.split(d).length > firstLine.split(best).length ? d : best,
   )
-  const rows: string[][] = []
+  const rows: CsvRow[] = []
   let row: string[] = []
   let cell = ''
   let quoted = false
+  let line = 1 // file line we are on
+  let rowLine = 1 // file line the current row started on
   for (let i = 0; i < src.length; i++) {
     const ch = src[i]
     if (quoted) {
@@ -37,25 +65,32 @@ export function parseCsv(text: string): string[][] {
           cell += '"'
           i++
         } else quoted = false
-      } else cell += ch
-    } else if (ch === '"' && cell === '') {
+      } else {
+        if (ch === '\n' || (ch === '\r' && src[i + 1] !== '\n')) line++
+        cell += ch
+      }
+    } else if (ch === '"' && cell.trim() === '') {
+      // An opening quote, possibly after spaces: `a, "1,000"`.
       quoted = true
+      cell = ''
     } else if (ch === delimiter) {
       row.push(cell)
       cell = ''
     } else if (ch === '\n' || ch === '\r') {
       if (ch === '\r' && src[i + 1] === '\n') i++
       row.push(cell)
-      rows.push(row)
+      rows.push({ cells: row, line: rowLine })
       row = []
       cell = ''
+      line++
+      rowLine = line
     } else cell += ch
   }
   row.push(cell)
-  rows.push(row)
+  rows.push({ cells: row, line: rowLine })
   return rows
-    .map((r) => r.map((c) => c.trim()))
-    .filter((r) => r.some((c) => c !== ''))
+    .map((r) => ({ ...r, cells: r.cells.map((c) => c.trim()) }))
+    .filter((r) => r.cells.some((c) => c !== ''))
 }
 
 // ---------------------------------------------------------------------------
@@ -113,9 +148,13 @@ export function guessColumns(header: string[]): ColumnMap {
 // ---------------------------------------------------------------------------
 // Values
 
-/** "1,234.50", "฿80", "(500)", "-500" → number; NaN when unreadable. */
+/**
+ * "1,234.50", "1.234,50", "12,5", "฿80", "(500)", "-500" → number; NaN when
+ * unreadable. With both `.` and `,` the last one is the decimal mark; a lone
+ * `,` is a thousands separator only when groups of 3 digits follow it.
+ */
 export function parseAmount(raw: string): number {
-  let s = raw.replace(/[\s,฿$]|THB|USD|บาท/gi, '')
+  let s = raw.replace(/[\s\u00a0฿$]|THB|USD|บาท/gi, '')
   let negative = false
   if (/^\(.*\)$/.test(s)) {
     negative = true
@@ -125,17 +164,49 @@ export function parseAmount(raw: string): number {
     negative = !negative
     s = s.slice(1)
   } else if (s.startsWith('+')) s = s.slice(1)
-  if (!/^\d+(\.\d+)?$/.test(s)) return NaN
+
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+  const commaIsDecimal =
+    lastComma >= 0 && (lastDot >= 0 ? lastComma > lastDot : !/^\d{1,3}(,\d{3})+$/.test(s))
+  s = commaIsDecimal ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '')
+
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return NaN
   const n = Number(s)
   return negative ? -n : n
 }
 
+/** Currency named in an amount cell ("$12", "12 USD", "฿80"), if any. */
+export function amountCurrency(raw: string): Currency | null {
+  if (/\$|usd/i.test(raw)) return 'USD'
+  if (/฿|thb|บาท/i.test(raw)) return 'THB'
+  return null
+}
+
+const SLASH_DATE = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})(.*)$/
+
+/**
+ * Whether the slash dates in a column are day-first (05/07 = 5 July). A first
+ * part above 12 means day-first, a second part above 12 means month-first;
+ * with neither it defaults to day-first (the Thai way).
+ */
+export function detectDayFirst(values: string[]): boolean {
+  for (const v of values) {
+    const m = SLASH_DATE.exec(v.trim())
+    if (!m) continue
+    if (Number(m[1]) > 12) return true
+    if (Number(m[2]) > 12) return false
+  }
+  return true
+}
+
 /**
  * Read a date the way people write them: 2026-07-05, 2026-07-05 12:30,
- * 05/07/2026 (day first), 5/7/2569 (Buddhist year), or a full ISO timestamp.
- * Times without a zone are local. Returns an ISO instant, or null.
+ * 05/07/2026 (day first unless `dayFirst` is false), 5/7/2569 (Buddhist
+ * year), or a full ISO timestamp. Times without a zone are local. Returns an
+ * ISO instant, or null.
  */
-export function parseDate(raw: string): string | null {
+export function parseDate(raw: string, dayFirst = true): string | null {
   const s = raw.trim()
   if (!s) return null
   // Full ISO with a zone: trust it.
@@ -150,9 +221,10 @@ export function parseDate(raw: string): string | null {
     ;[y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
     rest = m[4]
   } else {
-    m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4}|\d{2})(.*)$/.exec(s)
+    m = SLASH_DATE.exec(s)
     if (!m) return null
     ;[d, mo, y] = [Number(m[1]), Number(m[2]), Number(m[3])]
+    if (!dayFirst) [d, mo] = [mo, d]
     if (m[3].length === 2) y += 2000
     rest = m[4]
   }
@@ -161,10 +233,10 @@ export function parseDate(raw: string): string | null {
   let mi = 0
   const time = rest.trim().replace(/^T/, '')
   if (time) {
-    const t = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(time)
-    if (!t) return null
-    h = Number(t[1])
-    mi = Number(t[2])
+    const tm = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(time)
+    if (!tm) return null
+    h = Number(tm[1])
+    mi = Number(tm[2])
   }
   const date = new Date(y, mo - 1, d, h, mi)
   if (
@@ -203,21 +275,27 @@ export interface ImportDefaults {
   /** Used when a row has no account column / value. '' = none. */
   accountId: string
   timezone: string
+  /** Order of slash dates; undefined = detect it from the date column. */
+  dayFirst?: boolean
 }
 
 export type PreparedRow =
   | { line: number; ok: true; input: TransactionInput; cells: string[] }
   | { line: number; ok: false; error: string; cells: string[] }
 
+/** A data row: parsed with its file line, or plain cells (line = index + 2). */
+export type DataRow = CsvRow | string[]
+
 const key = (s: string) => s.trim().toLowerCase()
 
 /**
- * Turn data rows into transactions. `line` is the 1-based line in the file
- * (header = line 1). Without a type column, the amount's sign decides:
- * negative = expense, positive = income.
+ * Turn data rows into transactions. Without a type column, the amount's sign
+ * decides: negative = expense, positive = income. A row the server would
+ * reject fails here, so one bad row can't sink the whole (all-or-nothing)
+ * import.
  */
 export function prepareRows(
-  rows: string[][],
+  rows: DataRow[],
   columns: ColumnMap,
   categories: Category[],
   accounts: Account[],
@@ -230,17 +308,23 @@ export function prepareRows(
   const findSub = (parentId: string, name: string) =>
     categories.find((c) => c.parentId === parentId && key(c.name) === key(name))
   const cell = (r: string[], f: ImportField) => (columns[f] >= 0 ? (r[columns[f]] ?? '') : '')
+  const lookupAccount = (name: string): Account | null | undefined =>
+    name ? (accountByName.get(key(name)) ?? null) : undefined
 
-  return rows.map((cells, i): PreparedRow => {
-    const line = i + 2
+  const all = rows.map((r, i) => (Array.isArray(r) ? { cells: r, line: i + 2 } : r))
+  const dayFirst = defaults.dayFirst ?? detectDayFirst(all.map((r) => cell(r.cells, 'date')))
+
+  return all.map(({ cells, line }): PreparedRow => {
     const fail = (error: string): PreparedRow => ({ line, ok: false, error, cells })
 
-    const date = parseDate(cell(cells, 'date'))
+    const date = parseDate(cell(cells, 'date'), dayFirst)
     if (!date) return fail(t('Unreadable date "{value}"', { value: cell(cells, 'date') }))
 
-    const signed = parseAmount(cell(cells, 'amount'))
-    if (Number.isNaN(signed) || signed === 0) {
-      return fail(t('Unreadable amount "{value}"', { value: cell(cells, 'amount') }))
+    const rawAmount = cell(cells, 'amount')
+    const signed = parseAmount(rawAmount)
+    const amount = Math.round(Math.abs(signed) * 100) / 100
+    if (Number.isNaN(signed) || amount === 0 || amount > MAX_AMOUNT) {
+      return fail(t('Unreadable amount "{value}"', { value: rawAmount }))
     }
     let type: TransactionKind
     if (columns.type >= 0 && cell(cells, 'type')) {
@@ -251,41 +335,37 @@ export function prepareRows(
       type = signed < 0 ? 'expense' : 'income'
     }
 
-    const rawCurrency = cell(cells, 'currency').toUpperCase() || 'THB'
+    const rawCurrency =
+      cell(cells, 'currency').toUpperCase() || amountCurrency(rawAmount) || 'THB'
     if (rawCurrency !== 'THB' && rawCurrency !== 'USD') {
       return fail(t('Unsupported currency "{value}"', { value: rawCurrency }))
     }
     const currency = rawCurrency as Currency
 
-    const lookupAccount = (name: string): string | null | undefined => {
-      if (!name) return undefined
-      return accountByName.get(key(name))?.id ?? null
-    }
     const accountName = cell(cells, 'account')
-    const fromId = lookupAccount(accountName)
-    if (fromId === null) return fail(t('Unknown account "{value}"', { value: accountName }))
+    const from = lookupAccount(accountName)
+    if (from === null) return fail(t('Unknown account "{value}"', { value: accountName }))
 
-    const input: TransactionInput = {
-      type,
-      amount: Math.round(Math.abs(signed) * 100) / 100,
-      currency,
-      date,
-      timezone: defaults.timezone,
-    }
+    const input: TransactionInput = { type, amount, currency, date, timezone: defaults.timezone }
     const note = cell(cells, 'note')
     if (note) input.note = note.slice(0, 280)
 
     if (type === 'transfer') {
       const toName = cell(cells, 'toAccount')
-      const toId = lookupAccount(toName)
-      if (toId === null) return fail(t('Unknown account "{value}"', { value: toName }))
-      if (fromId) input.accountId = fromId
-      if (toId) input.toAccountId = toId
-      if (!fromId && !toId) return fail(t('A transfer needs a from or a to account'))
+      const to = lookupAccount(toName)
+      if (to === null) return fail(t('Unknown account "{value}"', { value: toName }))
+      if (!from && !to) return fail(t('A transfer needs a from or a to account'))
+      if (from && to && from.id === to.id) return fail(t('Cannot transfer to the same account'))
+      // Same rule as the server: balances don't convert currencies.
+      if ((from && from.currency !== currency) || (to && to.currency !== currency)) {
+        return fail(t('Accounts must be in the transfer currency'))
+      }
+      if (from) input.accountId = from.id
+      if (to) input.toAccountId = to.id
       return { line, ok: true, input, cells }
     }
 
-    const accountId = fromId ?? (defaults.accountId || undefined)
+    const accountId = from?.id ?? (defaults.accountId || undefined)
     if (accountId) input.accountId = accountId
 
     // "Food > Lunch" in one column works too.

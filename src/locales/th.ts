@@ -549,5 +549,11 @@ export const th: Record<string, string> = {
   "Preview": "ตัวอย่าง",
   "…and {count} more": "…และอีก {count} รายการ",
   "Import": "นำเข้า",
+  "Cannot transfer to the same account": "โอนเข้าบัญชีเดียวกันไม่ได้",
+  "Accounts must be in the transfer currency": "บัญชีต้องเป็นสกุลเงินเดียวกับการโอน",
+  "Date order": "รูปแบบวันที่",
+  "Detect": "ตรวจหาอัตโนมัติ",
+  "Day/Month/Year": "วัน/เดือน/ปี",
+  "Month/Day/Year": "เดือน/วัน/ปี",
 }
 
