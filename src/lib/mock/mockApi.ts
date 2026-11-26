@@ -86,7 +86,10 @@ function withCurrentBalance(a: StoredAccount): Account {
   let income = 0
   let expense = 0
   for (const t of transactions) {
-    if (t.accountId !== a.id || t.currency !== a.currency) continue
+    if (t.currency !== a.currency) continue
+    // A transfer is an outflow from `accountId` and an inflow to `toAccountId`.
+    if (t.type === 'transfer' && t.toAccountId === a.id) income += t.amount
+    if (t.accountId !== a.id) continue
     if (t.type === 'income') income += t.amount
     else expense += t.amount
   }
@@ -98,10 +101,11 @@ function withCurrentBalance(a: StoredAccount): Account {
 
 interface TxSeed {
   id: string
-  type: 'income' | 'expense'
+  type: Transaction['type']
   amount: number
-  categoryId: string
+  categoryId: string | null
   accountId: string
+  toAccountId?: string
   note: string
   date: string
   labelIds?: string[]
@@ -114,6 +118,7 @@ const txSeeds: TxSeed[] = [
   { id: 't5', type: 'expense', amount: 3_200, categoryId: 'bills', accountId: 'kbank', note: 'Electricity', date: daysAgo(3), labelIds: ['recurring'] },
   { id: 't6', type: 'income', amount: 65_000, categoryId: 'salary', accountId: 'kbank', note: 'Monthly salary', date: daysAgo(5), labelIds: ['recurring'] },
   { id: 't7', type: 'expense', amount: 15_000, categoryId: 'home', accountId: 'kbank', note: 'Condo rent', date: daysAgo(6), labelIds: ['recurring'] },
+  { id: 't8', type: 'transfer', amount: 2_000, categoryId: null, accountId: 'kbank', toAccountId: 'cash', note: 'ATM withdrawal', date: daysAgo(4) },
 ]
 let transactions: Transaction[] = txSeeds.map((s) => ({
   id: s.id,
@@ -126,6 +131,8 @@ let transactions: Transaction[] = txSeeds.map((s) => ({
   subCategory: null,
   accountId: s.accountId,
   account: txAccount(s.accountId),
+  toAccountId: s.toAccountId ?? null,
+  toAccount: txAccount(s.toAccountId ?? null),
   note: s.note,
   date: s.date,
   timezone: 'Asia/Bangkok',
@@ -335,6 +342,22 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     if (method === 'DELETE') {
       accounts = accounts.filter((x) => x.id !== param)
+      // As on the server: a transfer left with no account at all goes too; other
+      // transactions just lose the account.
+      transactions = transactions
+        .filter(
+          (t) =>
+            !(
+              t.type === 'transfer' &&
+              ((t.accountId === param && !t.toAccountId) ||
+                (t.toAccountId === param && !t.accountId))
+            ),
+        )
+        .map((t) => ({
+          ...t,
+          ...(t.accountId === param && { accountId: null, account: null }),
+          ...(t.toAccountId === param && { toAccountId: null, toAccount: null }),
+        }))
       // ON DELETE SET NULL, as on the server.
       holdings = holdings.map((h) => (h.accountId === param ? { ...h, accountId: null } : h))
       dividendRows = dividendRows.map((d) => (d.accountId === param ? { ...d, accountId: null } : d))
@@ -364,7 +387,7 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     const byMonth = new Map(cashFlow.map((m) => [m.month, m]))
     for (const t of transactions) {
       const bucket = byMonth.get(t.date.slice(0, 7))
-      if (!bucket) continue
+      if (!bucket || t.type === 'transfer') continue
       if (t.type === 'income') bucket.income += t.amount
       else bucket.expense += t.amount
     }
@@ -517,6 +540,17 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     const spend = new Map<string | null, number>()
     for (const t of transactions) {
       const k = key(new Date(t.date))
+      if (t.type === 'transfer') {
+        // Each side on its own, as balances do: nets to zero between own
+        // accounts; to/from nowhere it moves net worth.
+        const from = accounts.find((a) => a.id === t.accountId)
+        const to = accounts.find((a) => a.id === t.toAccountId)
+        let f = 0
+        if (from && from.currency === t.currency) f -= t.amount
+        if (to && to.currency === t.currency) f += t.amount
+        if (f !== 0) flow.set(k, (flow.get(k) ?? 0) + f)
+        continue
+      }
       const signed = t.type === 'income' ? t.amount : -t.amount
       const acc = accounts.find((a) => a.id === t.accountId)
       if (acc && acc.currency === t.currency) flow.set(k, (flow.get(k) ?? 0) + signed)
@@ -701,7 +735,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         .filter(
           (t) =>
             (!f('type') || t.type === f('type')) &&
-            (!f('accountId') || t.accountId === f('accountId')) &&
+            (!f('accountId') ||
+              t.accountId === f('accountId') ||
+              t.toAccountId === f('accountId')) &&
             (!f('categoryId') ||
               t.categoryId === f('categoryId') ||
               t.subCategoryId === f('categoryId')) &&
@@ -719,9 +755,14 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       } as T
     }
     const buildTx = (base: Partial<Transaction>): Transaction => {
-      const catId = (body?.categoryId as string) ?? null
-      const subId = (body?.subCategoryId as string) ?? null
+      const transfer = body?.type === 'transfer'
+      const catId = transfer ? null : ((body?.categoryId as string) ?? null)
+      const subId = transfer ? null : ((body?.subCategoryId as string) ?? null)
       const accId = (body?.accountId as string) ?? null
+      const toId = transfer ? ((body?.toAccountId as string) ?? null) : null
+      if (transfer && ((!accId && !toId) || accId === toId)) {
+        throw new ApiError(400, 'A transfer needs one account, or two different ones')
+      }
       const labelIds = (body?.labelIds as string[]) ?? []
       return {
         id: base.id ?? id(),
@@ -734,6 +775,8 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         subCategory: txCategory(subId),
         accountId: accId,
         account: txAccount(accId),
+        toAccountId: toId,
+        toAccount: txAccount(toId),
         note: (body?.note as string) ?? null,
         date: String(body?.date ?? now()),
         timezone: (body?.timezone as string) ?? null,

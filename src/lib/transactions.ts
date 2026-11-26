@@ -1,6 +1,7 @@
 // Transactions API client. Requests are authenticated with the stored access token.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
+import { t } from './i18n'
 
 export type Currency = 'THB' | 'USD'
 
@@ -24,9 +25,12 @@ export interface TransactionAccount {
   type: 'cash' | 'bank' | 'investment' | 'debt'
 }
 
+/** transfer = money moved between two of the user's own accounts. */
+export type TransactionKind = 'income' | 'expense' | 'transfer'
+
 export interface Transaction {
   id: string
-  type: 'income' | 'expense'
+  type: TransactionKind
   amount: number
   currency: string
   categoryId: string | null
@@ -35,6 +39,9 @@ export interface Transaction {
   subCategory: TransactionCategory | null
   accountId: string | null
   account: TransactionAccount | null
+  /** Transfers only: the destination account (`account` is the source). */
+  toAccountId?: string | null
+  toAccount?: TransactionAccount | null
   note: string | null
   date: string
   timezone: string | null
@@ -45,12 +52,16 @@ export interface Transaction {
 }
 
 export interface TransactionInput {
-  type: 'income' | 'expense'
+  type: TransactionKind
   amount: number
   currency: Currency
-  categoryId: string
+  /** Required for income/expense; omitted for a transfer. */
+  categoryId?: string
   subCategoryId?: string
+  /** For a transfer: the account the money leaves (required). */
   accountId?: string
+  /** Transfers only: the account the money goes to (required). */
+  toAccountId?: string
   note?: string
   date: string // full ISO timestamp
   timezone: string // IANA, e.g. "Asia/Bangkok"
@@ -62,7 +73,7 @@ function auth() {
 }
 
 export interface TransactionFilters {
-  type?: 'income' | 'expense'
+  type?: TransactionKind
   accountId?: string
   /** Matches the category or the sub-category. */
   categoryId?: string
@@ -121,4 +132,14 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: string): Promise<void> {
   await apiFetch<void>(`/transactions/${id}`, { method: 'DELETE', ...auth() })
+}
+
+/** Lucide icon name shown for transfers (they have no category). */
+export const TRANSFER_ICON = 'ArrowLeftRight'
+export const TRANSFER_COLOR = '#0ea5e9'
+
+/** "KBank → Cash" for a transfer ("Nowhere" for a missing side); '' otherwise. */
+export function transferRoute(tx: Transaction): string {
+  if (tx.type !== 'transfer') return ''
+  return `${tx.account?.name ?? t('Nowhere')} → ${tx.toAccount?.name ?? t('Nowhere')}`
 }

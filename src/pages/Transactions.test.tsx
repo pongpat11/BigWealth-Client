@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,7 +8,8 @@ import * as labelsApi from '@/lib/labels'
 import * as categoriesApi from '@/lib/categories'
 import * as accountsApi from '@/lib/accounts'
 
-vi.mock('@/lib/transactions', () => ({
+vi.mock('@/lib/transactions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/transactions')>()),
   listTransactionPage: vi.fn(),
   createTransaction: vi.fn(),
   updateTransaction: vi.fn(),
@@ -196,6 +197,120 @@ describe('Transactions page', () => {
     ]))
     renderPage()
     expect(await screen.findByText(/KBank Savings/)).toBeInTheDocument()
+  })
+
+  it('records a transfer between two accounts without a category', async () => {
+    const cash = { ...kbank, id: 'cash', name: 'Cash Wallet', institution: null, type: 'cash' as const }
+    const usd = { ...kbank, id: 'ibkr', name: 'IBKR', institution: null, currency: 'USD' as const }
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank, cash, usd])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    vi.mocked(api.createTransaction).mockResolvedValue({
+      ...sample,
+      id: '3',
+      type: 'transfer',
+      note: null,
+      categoryId: null,
+      category: null,
+      accountId: 'kbank',
+      account: { id: 'kbank', name: 'KBank Savings', type: 'bank' },
+      toAccountId: 'cash',
+      toAccount: { id: 'cash', name: 'Cash Wallet', type: 'cash' },
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    const sheet = screen.getByRole('dialog')
+    await user.click(within(sheet).getByRole('button', { name: /^transfer$/i }))
+    expect(screen.queryByLabelText('Category')).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText(/amount/i), '2000')
+    await user.selectOptions(await screen.findByLabelText('From account'), 'kbank')
+    // The source account and other-currency accounts are not destinations.
+    const to = screen.getByLabelText('To account')
+    expect(within(to).queryByRole('option', { name: /KBank/ })).not.toBeInTheDocument()
+    expect(within(to).queryByRole('option', { name: /IBKR/ })).not.toBeInTheDocument()
+    await user.selectOptions(to, 'cash')
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+
+    await waitFor(() =>
+      expect(api.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'transfer', amount: 2000, accountId: 'kbank', toAccountId: 'cash' }),
+      ),
+    )
+    expect(vi.mocked(api.createTransaction).mock.calls[0][0]).not.toHaveProperty('categoryId')
+    expect(await screen.findByText(/KBank Savings → Cash Wallet/)).toBeInTheDocument()
+  })
+
+  it('records a transfer from nowhere into an account', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    vi.mocked(api.createTransaction).mockResolvedValue({
+      ...sample,
+      id: '4',
+      type: 'transfer',
+      note: null,
+      categoryId: null,
+      category: null,
+      accountId: null,
+      account: null,
+      toAccountId: 'kbank',
+      toAccount: { id: 'kbank', name: 'KBank Savings', type: 'bank' },
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^transfer$/i }))
+    await user.type(screen.getByLabelText(/amount/i), '1000')
+    // Both sides start as Nowhere: saving needs at least one account.
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least one side/i)
+
+    await user.selectOptions(await screen.findByLabelText('To account'), 'kbank')
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+
+    await waitFor(() => expect(api.createTransaction).toHaveBeenCalled())
+    const input = vi.mocked(api.createTransaction).mock.calls[0][0]
+    expect(input).toMatchObject({ type: 'transfer', toAccountId: 'kbank' })
+    expect(input.accountId).toBeUndefined()
+    expect(await screen.findByText(/Nowhere → KBank Savings/)).toBeInTheDocument()
+  })
+
+  it('matches the currency to an account carried over into a transfer', async () => {
+    const ibkr = { ...kbank, id: 'ibkr', name: 'IBKR', institution: null, currency: 'USD' as const }
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank, ibkr])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.selectOptions(await screen.findByLabelText(/account \(optional\)/i), 'ibkr')
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^transfer$/i }))
+
+    const currency = screen.getByLabelText('Currency')
+    expect(currency).toHaveValue('USD')
+    expect(currency).toBeDisabled()
+  })
+
+  it('shows a transfer as money in or out when the list is filtered to an account', async () => {
+    const transfer = {
+      ...sample,
+      type: 'transfer' as const,
+      note: 'ATM',
+      categoryId: null,
+      category: null,
+      accountId: 'kbank',
+      account: { id: 'kbank', name: 'KBank Savings', type: 'bank' as const },
+      toAccountId: 'cash',
+      toAccount: { id: 'cash', name: 'Cash Wallet', type: 'cash' as const },
+    }
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([transfer]))
+    renderPage('/transactions?account=cash')
+    const row = await screen.findByRole('button', { name: /ATM/ })
+    expect(row).toHaveTextContent('+')
   })
 
   it('selects an account in the form and includes it when saving', async () => {
