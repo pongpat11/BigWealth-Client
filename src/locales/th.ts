@@ -493,4 +493,16 @@ export const th: Record<string, string> = {
   'Open in Portfolio': 'ดูในพอร์ต',
   'Could not load holdings.': 'โหลดสินทรัพย์ไม่สำเร็จ',
   'No holdings in this account yet.': 'ยังไม่มีสินทรัพย์ในบัญชีนี้',
+  // Quick add
+  'Quick add': 'เพิ่มด่วน',
+  Close: 'ปิด',
+  'Frequent · tap to add again': 'ใช้บ่อย · แตะเพื่อบันทึกซ้ำ',
+  'Add {name} {amount} again': 'บันทึก {name} {amount} อีกครั้ง',
+  'Other date': 'วันอื่น',
+  Keypad: 'แป้นตัวเลข',
+  'Delete digit': 'ลบตัวเลข',
+  'Pick a date.': 'เลือกวันที่',
+  'Saved {amount}': 'บันทึก {amount} แล้ว',
+  "Couldn't undo. {reason}": 'เลิกทำไม่สำเร็จ {reason}',
 }
+

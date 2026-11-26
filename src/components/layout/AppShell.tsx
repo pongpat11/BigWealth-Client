@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
 import { t } from '@/lib/i18n'
 import { runRecurring } from '@/lib/recurring'
+import { QuickAdd } from '@/components/QuickAdd'
 import { ErrorBoundary } from './ErrorBoundary'
 import { OfflineBanner } from './OfflineBanner'
 
@@ -161,13 +162,16 @@ export function AppShell() {
       </aside>
 
       {/* Content */}
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-24 pt-4 lg:px-8 lg:pb-8 lg:pt-6">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6">
         <OfflineBanner />
         {/* Keyed by path so a crashed screen clears when you navigate away. */}
         <ErrorBoundary key={`${pathname}#${dataVersion}`}>
           <Outlet />
         </ErrorBoundary>
       </main>
+
+      {/* Floating + on every screen; reload the screen after a quick add. */}
+      <QuickAdd onChange={() => setDataVersion((v) => v + 1)} />
 
       {/* Mobile bottom tab bar */}
       <nav
