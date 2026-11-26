@@ -122,13 +122,25 @@ function TransactionForm({
     (a) => a.id !== accountId && (!fromAccount || a.currency === fromAccount.currency),
   )
 
+  // '' on either side means "Nowhere": money from / to outside your accounts.
+  function matchCurrency(account: Account | undefined) {
+    if (account && CURRENCIES.includes(account.currency as Currency)) {
+      setCurrency(account.currency as Currency)
+    }
+  }
+
   function pickFromAccount(id: string) {
     setAccountId(id)
     const from = accounts.find((a) => a.id === id)
     if (!from) return
-    if (CURRENCIES.includes(from.currency as Currency)) setCurrency(from.currency as Currency)
+    matchCurrency(from)
     const to = accounts.find((a) => a.id === toAccountId)
     if (to && (to.id === from.id || to.currency !== from.currency)) setToAccountId('')
+  }
+
+  function pickToAccount(id: string) {
+    setToAccountId(id)
+    if (!fromAccount) matchCurrency(accounts.find((a) => a.id === id))
   }
 
   function toggleLabel(id: string) {
@@ -146,8 +158,8 @@ function TransactionForm({
       return
     }
     if (isTransfer) {
-      if (!accountId || !toAccountId) {
-        setError(t('Pick the account to transfer from and to.'))
+      if (!accountId && !toAccountId) {
+        setError(t('Pick an account on at least one side.'))
         return
       }
       if (accountId === toAccountId) {
@@ -169,7 +181,7 @@ function TransactionForm({
       labelIds: selectedLabelIds,
     }
     const input: TransactionInput = isTransfer
-      ? { ...common, accountId, toAccountId }
+      ? { ...common, accountId: accountId || undefined, toAccountId: toAccountId || undefined }
       : {
           ...common,
           categoryId,
@@ -270,7 +282,7 @@ function TransactionForm({
                   onChange={(e) => pickFromAccount(e.target.value)}
                   className={selectClass}
                 >
-                  <option value="">{t('Select…')}</option>
+                  <option value="">{t('Nowhere (outside your accounts)')}</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
@@ -286,10 +298,10 @@ function TransactionForm({
                 <select
                   id="to-account"
                   value={toAccountId}
-                  onChange={(e) => setToAccountId(e.target.value)}
+                  onChange={(e) => pickToAccount(e.target.value)}
                   className={selectClass}
                 >
-                  <option value="">{t('Select…')}</option>
+                  <option value="">{t('Nowhere (outside your accounts)')}</option>
                   {toOptions.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}

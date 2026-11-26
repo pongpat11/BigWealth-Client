@@ -523,8 +523,16 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     const flow = new Map<string, number>()
     const spend = new Map<string | null, number>()
     for (const t of transactions) {
-      if (t.type === 'transfer') continue // between own accounts: no net change
       const k = key(new Date(t.date))
+      if (t.type === 'transfer') {
+        // Between own accounts: no net change. To/from nowhere: moves net worth.
+        if (t.accountId && t.toAccountId) continue
+        const side = accounts.find((a) => a.id === (t.toAccountId ?? t.accountId))
+        if (side && side.currency === t.currency) {
+          flow.set(k, (flow.get(k) ?? 0) + (t.toAccountId ? t.amount : -t.amount))
+        }
+        continue
+      }
       const signed = t.type === 'income' ? t.amount : -t.amount
       const acc = accounts.find((a) => a.id === t.accountId)
       if (acc && acc.currency === t.currency) flow.set(k, (flow.get(k) ?? 0) + signed)
@@ -734,8 +742,8 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       const subId = transfer ? null : ((body?.subCategoryId as string) ?? null)
       const accId = (body?.accountId as string) ?? null
       const toId = transfer ? ((body?.toAccountId as string) ?? null) : null
-      if (transfer && (!accId || !toId || accId === toId)) {
-        throw new ApiError(400, 'A transfer needs two different accounts')
+      if (transfer && ((!accId && !toId) || accId === toId)) {
+        throw new ApiError(400, 'A transfer needs one account, or two different ones')
       }
       const labelIds = (body?.labelIds as string[]) ?? []
       return {

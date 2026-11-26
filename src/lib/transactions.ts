@@ -1,6 +1,7 @@
 // Transactions API client. Requests are authenticated with the stored access token.
 import { apiFetch } from './api'
 import { getAccessToken } from './auth'
+import { t } from './i18n'
 
 export type Currency = 'THB' | 'USD'
 
@@ -137,8 +138,8 @@ export async function deleteTransaction(id: string): Promise<void> {
 export const TRANSFER_ICON = 'ArrowLeftRight'
 export const TRANSFER_COLOR = '#0ea5e9'
 
-/** "KBank → Cash" for a transfer; '' for anything else. */
+/** "KBank → Cash" for a transfer ("Nowhere" for a missing side); '' otherwise. */
 export function transferRoute(tx: Transaction): string {
   if (tx.type !== 'transfer') return ''
-  return `${tx.account?.name ?? '?'} → ${tx.toAccount?.name ?? '?'}`
+  return `${tx.account?.name ?? t('Nowhere')} → ${tx.toAccount?.name ?? t('Nowhere')}`
 }

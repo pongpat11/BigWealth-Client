@@ -242,6 +242,42 @@ describe('Transactions page', () => {
     expect(await screen.findByText(/KBank Savings → Cash Wallet/)).toBeInTheDocument()
   })
 
+  it('records a transfer from nowhere into an account', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
+    vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
+    vi.mocked(api.createTransaction).mockResolvedValue({
+      ...sample,
+      id: '4',
+      type: 'transfer',
+      note: null,
+      categoryId: null,
+      category: null,
+      accountId: null,
+      account: null,
+      toAccountId: 'kbank',
+      toAccount: { id: 'kbank', name: 'KBank Savings', type: 'bank' },
+    })
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/no transactions yet/i)
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^transfer$/i }))
+    await user.type(screen.getByLabelText(/amount/i), '1000')
+    // Both sides start as Nowhere: saving needs at least one account.
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/at least one side/i)
+
+    await user.selectOptions(await screen.findByLabelText('To account'), 'kbank')
+    await user.click(screen.getByRole('button', { name: /add transaction/i }))
+
+    await waitFor(() => expect(api.createTransaction).toHaveBeenCalled())
+    const input = vi.mocked(api.createTransaction).mock.calls[0][0]
+    expect(input).toMatchObject({ type: 'transfer', toAccountId: 'kbank' })
+    expect(input.accountId).toBeUndefined()
+    expect(await screen.findByText(/Nowhere → KBank Savings/)).toBeInTheDocument()
+  })
+
   it('selects an account in the form and includes it when saving', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([kbank])
     vi.mocked(api.listTransactionPage).mockResolvedValue(page([]))
