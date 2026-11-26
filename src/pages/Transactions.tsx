@@ -26,10 +26,15 @@ import {
   createTransaction,
   deleteTransaction,
   listTransactionPage,
+  transferRoute,
   updateTransaction,
+  TRANSFER_COLOR,
+  TRANSFER_ICON,
   type Currency,
   type Transaction,
   type TransactionFilters,
+  type TransactionInput,
+  type TransactionKind,
 } from '@/lib/transactions'
 
 const CURRENCIES: Currency[] = ['THB', 'USD']
@@ -41,6 +46,12 @@ function formatMoney(amount: number, currency: string) {
     return '$' + amount.toLocaleString('en-US', { maximumFractionDigits: 2 })
   return `${amount.toLocaleString()} ${currency}`
 }
+
+const TYPE_OPTIONS: { value: TransactionKind; label: string }[] = [
+  { value: 'expense', label: t('Expense') },
+  { value: 'income', label: t('Income') },
+  { value: 'transfer', label: t('Transfer') },
+]
 
 const selectClass =
   'h-11 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-[15px] text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500'
@@ -57,7 +68,7 @@ function TransactionForm({
   onClose: () => void
 }) {
   const isEdit = Boolean(initial)
-  const [type, setType] = useState<'income' | 'expense'>(initial?.type ?? 'expense')
+  const [type, setType] = useState<TransactionKind>(initial?.type ?? 'expense')
   const [amount, setAmount] = useState(initial ? String(initial.amount) : '')
   const [currency, setCurrency] = useState<Currency>(
     (initial?.currency as Currency) ?? 'THB',
@@ -65,6 +76,8 @@ function TransactionForm({
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '')
   const [subCategoryId, setSubCategoryId] = useState(initial?.subCategoryId ?? '')
   const [accountId, setAccountId] = useState(initial?.accountId ?? '')
+  const [toAccountId, setToAccountId] = useState(initial?.toAccountId ?? '')
+  const isTransfer = type === 'transfer'
   const [dateTime, setDateTime] = useState(
     initial ? toDateTimeLocalValue(initial.date) : nowDateTimeLocalValue(),
   )
@@ -103,6 +116,20 @@ function TransactionForm({
     () => categories.filter((c) => c.parentId === categoryId),
     [categories, categoryId],
   )
+  // Balances don't convert currencies, so a transfer stays within one currency.
+  const fromAccount = accounts.find((a) => a.id === accountId)
+  const toOptions = accounts.filter(
+    (a) => a.id !== accountId && (!fromAccount || a.currency === fromAccount.currency),
+  )
+
+  function pickFromAccount(id: string) {
+    setAccountId(id)
+    const from = accounts.find((a) => a.id === id)
+    if (!from) return
+    if (CURRENCIES.includes(from.currency as Currency)) setCurrency(from.currency as Currency)
+    const to = accounts.find((a) => a.id === toAccountId)
+    if (to && (to.id === from.id || to.currency !== from.currency)) setToAccountId('')
+  }
 
   function toggleLabel(id: string) {
     setSelectedLabelIds((prev) =>
@@ -118,23 +145,37 @@ function TransactionForm({
       setError(t('Enter an amount greater than 0.'))
       return
     }
-    if (!categoryId) {
+    if (isTransfer) {
+      if (!accountId || !toAccountId) {
+        setError(t('Pick the account to transfer from and to.'))
+        return
+      }
+      if (accountId === toAccountId) {
+        setError(t('Pick two different accounts.'))
+        return
+      }
+    } else if (!categoryId) {
       setError(t('Pick a category.'))
       return
     }
     setSaving(true)
-    const input = {
+    const common = {
       type,
       amount: value,
       currency,
-      categoryId,
-      subCategoryId: subCategoryId || undefined,
-      accountId: accountId || undefined,
       note: note.trim() || undefined,
       date: new Date(dateTime).toISOString(),
       timezone,
       labelIds: selectedLabelIds,
     }
+    const input: TransactionInput = isTransfer
+      ? { ...common, accountId, toAccountId }
+      : {
+          ...common,
+          categoryId,
+          subCategoryId: subCategoryId || undefined,
+          accountId: accountId || undefined,
+        }
     try {
       const saved = initial
         ? await updateTransaction(initial.id, input)
@@ -160,24 +201,26 @@ function TransactionForm({
             </p>
           )}
 
-          <div className="flex gap-2">
-            {(['expense', 'income'] as const).map((t) => (
+          <div className="flex gap-2" role="group" aria-label={t('Transaction type')}>
+            {TYPE_OPTIONS.map((opt) => (
               <button
-                key={t}
+                key={opt.value}
                 type="button"
+                aria-pressed={type === opt.value}
                 onClick={() => {
-                  setType(t)
+                  setType(opt.value)
                   setCategoryId('')
                   setSubCategoryId('')
+                  if (opt.value !== 'transfer') setToAccountId('')
                 }}
                 className={
-                  'flex-1 rounded-xl py-2 text-sm font-semibold capitalize transition-colors ' +
-                  (type === t
+                  'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
+                  (type === opt.value
                     ? 'bg-brand-600 text-white'
                     : 'bg-[var(--color-canvas)] text-[var(--color-muted)]')
                 }
               >
-                {t}
+                {opt.label}
               </button>
             ))}
           </div>
@@ -215,29 +258,74 @@ function TransactionForm({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="category" className="text-[13px] font-medium text-[var(--color-muted)]">
-              {t('Category')}
-            </label>
-            <select
-              id="category"
-              value={categoryId}
-              onChange={(e) => {
-                setCategoryId(e.target.value)
-                setSubCategoryId('')
-              }}
-              className={selectClass}
-            >
-              <option value="">{t('Select…')}</option>
-              {topLevel.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {isTransfer && (
+            <>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="from-account" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  {t('From account')}
+                </label>
+                <select
+                  id="from-account"
+                  value={accountId}
+                  onChange={(e) => pickFromAccount(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">{t('Select…')}</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.institution ? ` · ${a.institution}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="to-account" className="text-[13px] font-medium text-[var(--color-muted)]">
+                  {t('To account')}
+                </label>
+                <select
+                  id="to-account"
+                  value={toAccountId}
+                  onChange={(e) => setToAccountId(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="">{t('Select…')}</option>
+                  {toOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.institution ? ` · ${a.institution}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
-          {subOptions.length > 0 && (
+          {!isTransfer && (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="category" className="text-[13px] font-medium text-[var(--color-muted)]">
+                {t('Category')}
+              </label>
+              <select
+                id="category"
+                value={categoryId}
+                onChange={(e) => {
+                  setCategoryId(e.target.value)
+                  setSubCategoryId('')
+                }}
+                className={selectClass}
+              >
+                <option value="">{t('Select…')}</option>
+                {topLevel.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!isTransfer && subOptions.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="subcategory" className="text-[13px] font-medium text-[var(--color-muted)]">
                 {t('Sub-category (optional)')}
@@ -258,7 +346,7 @@ function TransactionForm({
             </div>
           )}
 
-          {accounts.length > 0 && (
+          {!isTransfer && accounts.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <label htmlFor="account" className="text-[13px] font-medium text-[var(--color-muted)]">
                 {t('Account (optional)')}
@@ -356,10 +444,15 @@ function TransactionForm({
 
 function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transaction) => void }) {
   const cat = tx.category
+  const isTransfer = tx.type === 'transfer'
   const positive = tx.type === 'income'
-  const categoryLabel = tx.subCategory
-    ? `${cat?.name ?? ''} · ${tx.subCategory.name}`
-    : (cat?.name ?? t('Uncategorized'))
+  const categoryLabel = isTransfer
+    ? t('Transfer')
+    : tx.subCategory
+      ? `${cat?.name ?? ''} · ${tx.subCategory.name}`
+      : (cat?.name ?? t('Uncategorized'))
+  const color = isTransfer ? TRANSFER_COLOR : cat?.color
+  const accountText = isTransfer ? transferRoute(tx) : tx.account?.name
   return (
     <button
       type="button"
@@ -368,9 +461,9 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
     >
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-full"
-        style={{ backgroundColor: (cat?.color ?? FALLBACK_COLOR) + '20', color: cat?.color ?? '#64748b' }}
+        style={{ backgroundColor: (color ?? FALLBACK_COLOR) + '20', color: color ?? '#64748b' }}
       >
-        <Icon name={cat?.icon ?? 'Circle'} size={16} aria-hidden />
+        <Icon name={isTransfer ? TRANSFER_ICON : (cat?.icon ?? 'Circle')} size={16} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-1 truncate text-sm font-semibold text-[var(--color-ink)]">
@@ -385,7 +478,7 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
         </p>
         <p className="text-xs text-[var(--color-muted)]">
           {categoryLabel}
-          {tx.account ? ` · ${tx.account.name}` : ''} · {formatDateTime(tx.date, tx.timezone)}
+          {accountText ? ` · ${accountText}` : ''} · {formatDateTime(tx.date, tx.timezone)}
         </p>
         {tx.labels.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1">
@@ -407,10 +500,14 @@ function TransactionRow({ tx, onEdit }: { tx: Transaction; onEdit: (t: Transacti
       <span
         className={
           'tnum shrink-0 text-sm font-semibold ' +
-          (positive ? 'text-[var(--color-gain)]' : 'text-[var(--color-ink)]')
+          (positive
+            ? 'text-[var(--color-gain)]'
+            : isTransfer
+              ? 'text-[var(--color-muted)]'
+              : 'text-[var(--color-ink)]')
         }
       >
-        {positive ? '+' : '−'}
+        {isTransfer ? '' : positive ? '+' : '−'}
         {formatMoney(tx.amount, tx.currency)}
       </span>
     </button>
@@ -421,6 +518,7 @@ const TYPE_TABS = [
   { value: '', label: t('All') },
   { value: 'income', label: t('Income') },
   { value: 'expense', label: t('Expense') },
+  { value: 'transfer', label: t('Transfer') },
 ] as const
 
 /** Local midnight of a 'YYYY-MM-DD' date, shifted by `addDays`, as an ISO instant. */
@@ -436,7 +534,9 @@ function dayStartIso(date: string, addDays = 0): string | undefined {
  */
 function matchesFilters(tx: Transaction, f: TransactionFilters): boolean {
   if (f.type && tx.type !== f.type) return false
-  if (f.accountId && tx.accountId !== f.accountId) return false
+  if (f.accountId && tx.accountId !== f.accountId && tx.toAccountId !== f.accountId) {
+    return false
+  }
   if (f.categoryId && tx.categoryId !== f.categoryId && tx.subCategoryId !== f.categoryId) {
     return false
   }
@@ -483,7 +583,8 @@ export function Transactions() {
 
   const filters = useMemo<TransactionFilters>(
     () => ({
-      type: type === 'income' || type === 'expense' ? type : undefined,
+      type:
+        type === 'income' || type === 'expense' || type === 'transfer' ? type : undefined,
       accountId: accountId || undefined,
       categoryId: categoryId || undefined,
       from: from ? dayStartIso(from) : undefined,

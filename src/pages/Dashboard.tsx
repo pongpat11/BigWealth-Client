@@ -19,7 +19,13 @@ import { ApiError } from '@/lib/api'
 import { me } from '@/lib/auth'
 import { listAccounts, type Account, type AccountType } from '@/lib/accounts'
 import { getDashboardSummary, type DashboardSummary } from '@/lib/dashboard'
-import { listTransactions, type Transaction } from '@/lib/transactions'
+import {
+  listTransactions,
+  transferRoute,
+  TRANSFER_COLOR,
+  TRANSFER_ICON,
+  type Transaction,
+} from '@/lib/transactions'
 import {
   formatDate,
   formatSignedTHB,
@@ -55,32 +61,39 @@ function monthLabel(month: string): string {
 function RecentRow({ tx }: { tx: Transaction }) {
   const cat = tx.category
   const isIncome = tx.type === 'income'
+  const isTransfer = tx.type === 'transfer'
+  const color = isTransfer ? TRANSFER_COLOR : cat?.color
+  const label = isTransfer ? t('Transfer') : (cat?.name ?? t('Uncategorized'))
   return (
     <div className="flex items-center gap-3 py-3">
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-full"
         style={{
-          background: `${cat?.color ?? FALLBACK_COLOR}1f`,
-          color: cat?.color ?? FALLBACK_COLOR,
+          background: `${color ?? FALLBACK_COLOR}1f`,
+          color: color ?? FALLBACK_COLOR,
         }}
       >
-        <Icon name={cat?.icon ?? 'Circle'} size={16} aria-hidden />
+        <Icon name={isTransfer ? TRANSFER_ICON : (cat?.icon ?? 'Circle')} size={16} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || cat?.name || t('Uncategorized')}
+          {tx.note || label}
         </p>
         <p className="text-xs text-[var(--color-muted)]">
-          {cat?.name ?? t('Uncategorized')} · {formatDate(tx.date)}
+          {isTransfer ? `${label} · ${transferRoute(tx)}` : label} · {formatDate(tx.date)}
         </p>
       </div>
       <span
         className={
           'tnum text-sm font-semibold ' +
-          (isIncome ? 'text-[var(--color-gain)]' : 'text-[var(--color-ink)]')
+          (isIncome
+            ? 'text-[var(--color-gain)]'
+            : isTransfer
+              ? 'text-[var(--color-muted)]'
+              : 'text-[var(--color-ink)]')
         }
       >
-        {formatSignedTHB(isIncome ? tx.amount : -tx.amount)}
+        {isTransfer ? formatTHB(tx.amount) : formatSignedTHB(isIncome ? tx.amount : -tx.amount)}
       </span>
     </div>
   )

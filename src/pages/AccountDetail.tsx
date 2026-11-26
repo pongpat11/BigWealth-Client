@@ -9,7 +9,13 @@ import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDateTime, formatPercent } from '@/lib/format'
 import { getPortfolio, holdingQuantityText, type Holding } from '@/lib/portfolio'
-import { listTransactionPage, type Transaction } from '@/lib/transactions'
+import {
+  listTransactionPage,
+  transferRoute,
+  TRANSFER_COLOR,
+  TRANSFER_ICON,
+  type Transaction,
+} from '@/lib/transactions'
 import { ACCOUNT_TYPES, formatMoney } from '@/lib/accountMeta'
 import { t } from '@/lib/i18n'
 import { AccountForm } from './Accounts'
@@ -17,26 +23,31 @@ import { AccountForm } from './Accounts'
 const FALLBACK_COLOR = '#94a3b8'
 const PAGE_SIZE = 30
 
-function TxRow({ tx }: { tx: Transaction }) {
+function TxRow({ tx, accountId }: { tx: Transaction; accountId: string }) {
   const cat = tx.category
-  const income = tx.type === 'income'
+  const isTransfer = tx.type === 'transfer'
+  // A transfer is money in on its destination account, money out on its source.
+  const income = tx.type === 'income' || (isTransfer && tx.toAccountId === accountId)
+  const color = isTransfer ? TRANSFER_COLOR : cat?.color
+  const label = isTransfer ? t('Transfer') : (cat?.name ?? t('Uncategorized'))
   return (
     <div className="flex items-center gap-3 py-3">
       <span
         className="flex size-9 shrink-0 items-center justify-center rounded-full"
         style={{
-          backgroundColor: (cat?.color ?? FALLBACK_COLOR) + '20',
-          color: cat?.color ?? '#64748b',
+          backgroundColor: (color ?? FALLBACK_COLOR) + '20',
+          color: color ?? '#64748b',
         }}
       >
-        <Icon name={cat?.icon ?? 'Circle'} size={16} aria-hidden />
+        <Icon name={isTransfer ? TRANSFER_ICON : (cat?.icon ?? 'Circle')} size={16} aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
-          {tx.note || cat?.name || t('Uncategorized')}
+          {tx.note || label}
         </p>
         <p className="truncate text-xs text-[var(--color-muted)]">
-          {cat?.name ?? t('Uncategorized')} · {formatDateTime(tx.date, tx.timezone)}
+          {isTransfer ? `${label} · ${transferRoute(tx)}` : label} ·{' '}
+          {formatDateTime(tx.date, tx.timezone)}
         </p>
       </div>
       <span
@@ -360,7 +371,7 @@ function AccountDetailView({ id }: { id: string }) {
               {t('No transactions in this account yet.')}
             </p>
           ) : (
-            txs.map((tx) => <TxRow key={tx.id} tx={tx} />)
+            txs.map((tx) => <TxRow key={tx.id} tx={tx} accountId={id} />)
           )}
         </CardBody>
       </Card>
