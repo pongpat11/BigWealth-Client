@@ -27,14 +27,46 @@ test('adding an expense shows it in the transactions list', async ({ page }) => 
   await signIn(page, '/transactions')
   await expect(page).toHaveURL(/\/transactions/)
 
+  // Add opens the quick-add sheet: keypad, category chips, note behind an icon.
   await page.getByRole('button', { name: /^add$/i }).click()
-  await page.getByLabel('Amount').fill('245')
-  await page.getByLabel('Category').selectOption({ label: 'Transport' })
-  await page.getByLabel('Note (optional)').fill('E2E taxi ride')
-  await page.getByRole('button', { name: 'Add transaction' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Quick add' })
+  const keypad = sheet.getByRole('group', { name: 'Keypad' })
+  for (const key of ['2', '4', '5']) await keypad.getByRole('button', { name: key, exact: true }).click()
+  await expect(sheet.getByRole('status', { name: 'Amount' })).toHaveText('−฿245')
+  await sheet.getByRole('button', { name: 'Transport', exact: true }).click()
+  await sheet.getByRole('button', { name: 'Note (optional)' }).click()
+  await sheet.getByRole('textbox', { name: 'Note (optional)' }).fill('E2E taxi ride')
+  await sheet.getByRole('button', { name: 'Save', exact: true }).click()
 
+  await expect(sheet).toBeHidden()
   await expect(page.getByText('E2E taxi ride')).toBeVisible()
   await expect(page.getByText('−฿245').first()).toBeVisible()
+})
+
+test('the floating + saves a frequent entry in one tap, with Undo', async ({ page }) => {
+  await signIn(page, '/transactions')
+  await expect(page).toHaveURL(/\/transactions/)
+
+  // Record the same coffee twice so it becomes a frequent entry.
+  for (let i = 0; i < 2; i++) {
+    await page.getByRole('button', { name: 'Quick add' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Quick add' })
+    const keypad = sheet.getByRole('group', { name: 'Keypad' })
+    for (const key of ['6', '5']) await keypad.getByRole('button', { name: key, exact: true }).click()
+    await sheet.getByRole('button', { name: 'Food & Dining', exact: true }).click()
+    await sheet.getByRole('button', { name: 'Note (optional)' }).click()
+    await sheet.getByRole('textbox', { name: 'Note (optional)' }).fill('E2E coffee')
+    await sheet.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(sheet).toBeHidden()
+  }
+  await expect(page.getByText('E2E coffee')).toHaveCount(2)
+
+  await page.getByRole('button', { name: 'Quick add' }).click()
+  await page.getByRole('button', { name: /Add E2E coffee ฿65 again/ }).click()
+  await expect(page.getByText('E2E coffee')).toHaveCount(3)
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByText('E2E coffee')).toHaveCount(2)
 })
 
 test('unknown routes show the 404 page inside the app', async ({ page }) => {
