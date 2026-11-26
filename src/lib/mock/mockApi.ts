@@ -754,21 +754,21 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         nextCursor: start + limit < rows.length ? items[items.length - 1].id : null,
       } as T
     }
-    const buildTx = (base: Partial<Transaction>): Transaction => {
-      const transfer = body?.type === 'transfer'
-      const catId = transfer ? null : ((body?.categoryId as string) ?? null)
-      const subId = transfer ? null : ((body?.subCategoryId as string) ?? null)
-      const accId = (body?.accountId as string) ?? null
-      const toId = transfer ? ((body?.toAccountId as string) ?? null) : null
+    const buildTx = (base: Partial<Transaction>, b: Body = body): Transaction => {
+      const transfer = b?.type === 'transfer'
+      const catId = transfer ? null : ((b?.categoryId as string) ?? null)
+      const subId = transfer ? null : ((b?.subCategoryId as string) ?? null)
+      const accId = (b?.accountId as string) ?? null
+      const toId = transfer ? ((b?.toAccountId as string) ?? null) : null
       if (transfer && ((!accId && !toId) || accId === toId)) {
         throw new ApiError(400, 'A transfer needs one account, or two different ones')
       }
-      const labelIds = (body?.labelIds as string[]) ?? []
+      const labelIds = (b?.labelIds as string[]) ?? []
       return {
         id: base.id ?? id(),
-        type: body?.type as Transaction['type'],
-        amount: Number(body?.amount ?? 0),
-        currency: String(body?.currency ?? 'THB'),
+        type: b?.type as Transaction['type'],
+        amount: Number(b?.amount ?? 0),
+        currency: String(b?.currency ?? 'THB'),
         categoryId: catId,
         subCategoryId: subId,
         category: txCategory(catId),
@@ -777,15 +777,21 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
         account: txAccount(accId),
         toAccountId: toId,
         toAccount: txAccount(toId),
-        note: (body?.note as string) ?? null,
-        date: String(body?.date ?? now()),
-        timezone: (body?.timezone as string) ?? null,
+        note: (b?.note as string) ?? null,
+        date: String(b?.date ?? now()),
+        timezone: (b?.timezone as string) ?? null,
         createdAt: base.createdAt ?? now(),
         labels: labelIds
           .map((lid) => labels.find((x) => x.id === lid))
           .filter((l): l is Label => Boolean(l))
           .map((l) => ({ id: l.id, name: l.name, color: l.color })),
       }
+    }
+    if (method === 'POST' && param === 'import') {
+      const items = (body?.items as Body[]) ?? []
+      const created = items.map((item) => buildTx({}, item))
+      transactions = [...transactions, ...created]
+      return { imported: created.length } as T
     }
     if (method === 'POST') {
       const t = buildTx({})
