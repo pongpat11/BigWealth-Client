@@ -555,5 +555,39 @@ export const th: Record<string, string> = {
   "Detect": "ตรวจหาอัตโนมัติ",
   "Day/Month/Year": "วัน/เดือน/ปี",
   "Month/Day/Year": "เดือน/วัน/ปี",
+  // Export
+  Export: 'ส่งออก',
+  'Export & tax report': 'ส่งออกและรายงานภาษี',
+  'Your data as CSV, and a tax report to print': 'ดาวน์โหลดข้อมูลเป็น CSV และพิมพ์รายงานภาษี',
+  'Download CSV': 'ดาวน์โหลด CSV',
+  'Opens in Excel, Numbers or Google Sheets.': 'เปิดได้ใน Excel, Numbers หรือ Google Sheets',
+  'Date range': 'ช่วงวันที่',
+  'Last month': 'เดือนที่แล้ว',
+  'This year': 'ปีนี้',
+  'Last year': 'ปีที่แล้ว',
+  'Pick a start date on or before the end date.': 'เลือกวันเริ่มต้นที่ไม่เกินวันสิ้นสุด',
+  'Could not export. Try again.': 'ส่งออกไม่สำเร็จ ลองอีกครั้ง',
+  'Exporting…': 'กำลังส่งออก…',
+  'Transactions CSV': 'รายการ (CSV)',
+  'Dividends CSV': 'เงินปันผล (CSV)',
+  Total: 'รวม',
+  'Tax summary {year}': 'สรุปภาษีปี {year}',
+  'Generated {date} · BigWealth': 'สร้างเมื่อ {date} · BigWealth',
+  'No dividends this year.': 'ไม่มีเงินปันผลในปีนี้',
+  'Total (THB)': 'รวม (บาท)',
+  'USD converted at ฿{rate} per $1 ({date} reference rate).':
+    'แปลง USD ที่ ฿{rate} ต่อ $1 (อัตราอ้างอิงวันที่ {date})',
+  '{count} dividends could not be converted to THB and are left out of the totals.':
+    'เงินปันผล {count} รายการแปลงเป็นบาทไม่ได้ จึงไม่รวมในยอดรวม',
+  'Expenses (THB)': 'รายจ่าย (บาท)',
+  '{count} transactions in other currencies are not included.':
+    'ไม่รวมรายการในสกุลเงินอื่น {count} รายการ',
+  'For your own records. Check the figures against your broker and bank statements before filing.':
+    'ใช้เป็นข้อมูลส่วนตัว โปรดตรวจตัวเลขกับรายงานจากโบรกเกอร์และธนาคารก่อนยื่นภาษี',
+  'Could not load the tax summary.': 'โหลดสรุปภาษีไม่สำเร็จ',
+  'Tax report': 'รายงานภาษี',
+  'Dividends with tax withheld, and income and expenses by category, for one calendar year.':
+    'เงินปันผลพร้อมภาษีหัก ณ ที่จ่าย และรายรับรายจ่ายตามหมวดหมู่ ของปีปฏิทินที่เลือก',
+  'Tax year': 'ปีภาษี',
+  'Print or save as PDF': 'พิมพ์หรือบันทึกเป็น PDF',
 }
-

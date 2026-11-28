@@ -739,7 +739,7 @@ export function QuickAddProvider({
         aria-label={t('Quick add')}
         onClick={openSheet}
         className={cn(
-          'fixed right-4 z-30 flex size-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-[bottom,transform] hover:bg-brand-700 active:scale-95 lg:right-8',
+          'fixed right-4 z-30 flex print:hidden size-14 items-center justify-center rounded-full bg-brand-600 text-white shadow-lg transition-[bottom,transform] hover:bg-brand-700 active:scale-95 lg:right-8',
           toast
             ? 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))] lg:bottom-24'
             : 'bottom-[calc(4.75rem+env(safe-area-inset-bottom))] lg:bottom-8',
