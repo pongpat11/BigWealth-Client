@@ -367,6 +367,11 @@ export const th: Record<string, string> = {
   'Portfolio sections': 'ส่วนของพอร์ต',
   Holdings: 'สินทรัพย์',
   Dividends: 'เงินปันผล',
+  Holding: 'สินทรัพย์',
+  'Use {pct}% ({amount})': 'ใช้ {pct}% ({amount})',
+  'Refresh prices': 'อัปเดตราคา',
+  'Updating…': 'กำลังอัปเดต…',
+  'Updated {time}': 'อัปเดต {time}',
 
   // Recurring
   Weekly: 'ทุกสัปดาห์',

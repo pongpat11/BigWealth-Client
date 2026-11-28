@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sortHoldings, type Holding } from './portfolio'
+import { holdingGain, roundPercents, sortHoldings, type Holding } from './portfolio'
 
 const h = (symbol: string, valueTHB: number | null, gainPct: number | null): Holding => ({
   id: symbol,
@@ -49,5 +49,25 @@ describe('sortHoldings', () => {
   it('does not change the input', () => {
     sortHoldings(rows, 'symbol')
     expect(symbols(rows)).toEqual(['PTT', 'CPALL', 'AOT', 'ADVANC'])
+  })
+})
+
+describe('roundPercents', () => {
+  it('adds up to exactly 100', () => {
+    expect(roundPercents([1, 1, 1])).toEqual([34, 33, 33])
+    expect(roundPercents([50.5, 30.3, 19.2])).toEqual([51, 30, 19])
+    expect(roundPercents([985, 10, 5])).toEqual([99, 1, 0])
+  })
+
+  it('leaves all zeros at zero', () => {
+    expect(roundPercents([0, 0])).toEqual([0, 0])
+    expect(roundPercents([])).toEqual([])
+  })
+})
+
+describe('holdingGain', () => {
+  it('is in baht when the holding converts, else in its own currency', () => {
+    expect(holdingGain({ marketValue: 6000, costBasis: 6240, marketValueTHB: 204000, costBasisTHB: 212160, currency: 'USD' })).toEqual({ amount: -8160, currency: 'THB' })
+    expect(holdingGain({ marketValue: 6000, costBasis: 6240, marketValueTHB: null, costBasisTHB: null, currency: 'USD' })).toEqual({ amount: -240, currency: 'USD' })
   })
 })
