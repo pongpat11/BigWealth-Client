@@ -1,11 +1,12 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
-  type PointerEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
 import { GripVertical, Lock, Minus, MoreHorizontal, Plus } from 'lucide-react'
@@ -28,6 +29,8 @@ import { cn } from '@/lib/utils'
 // then the More-page paths. Where an item sits relative to the More row says
 // which group it is in, so dragging across it moves an item between groups.
 const MORE = '#more'
+/** Distance from the sheet's top/bottom edge where a drag scrolls it. */
+const EDGE_PX = 48
 
 function toOrder(layout: NavLayout): string[] {
   return [...layout.tabs, MORE, ...layout.more]
@@ -68,6 +71,18 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
   const [announce, setAnnounce] = useState('')
   const hintTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const list = useRef<HTMLUListElement>(null)
+  // Live copies for the window-level drag listeners, which outlive a render.
+  const orderRef = useRef(order)
+  const dragRef = useRef<Drag | null>(null)
+  const stopDrag = useRef<() => void>(() => undefined)
+  // Set while a keyboard move re-inserts the focused row, so the blur that
+  // causes doesn't count as leaving the handle.
+  const movingRef = useRef(false)
+
+  function commitOrder(next: string[]) {
+    orderRef.current = next
+    setOrder(next)
+  }
 
   // Keep the dragged row under the pointer: measure where the row would sit
   // untransformed (it moves as the order changes) and offset it from there.
@@ -82,6 +97,23 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
       row.style.transform = ''
     }
   })
+
+  // A keyboard move can re-insert the grabbed row's node, which drops focus:
+  // put it back on the handle.
+  useLayoutEffect(() => {
+    if (grabbed) {
+      list.current?.querySelector<HTMLElement>(`[data-handle="${grabbed}"]`)?.focus()
+    }
+    movingRef.current = false
+  }, [order, grabbed])
+
+  useEffect(
+    () => () => {
+      clearTimeout(hintTimer.current)
+      stopDrag.current()
+    },
+    [],
+  )
 
   const tabCount = order.indexOf(MORE)
 
@@ -107,7 +139,7 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
       showHint(why)
       return false
     }
-    setOrder(next)
+    commitOrder(next)
     setAnnounce(describe(next, path))
     return true
   }
@@ -123,47 +155,84 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
 
   // --- Pointer drag (mouse, touch, pen) ---
 
-  function onPointerDown(e: PointerEvent<HTMLButtonElement>, path: string) {
-    if (e.button !== 0) return
-    e.currentTarget.setPointerCapture?.(e.pointerId)
-    const row = e.currentTarget.closest<HTMLElement>('[data-path]')
-    const top = row?.getBoundingClientRect().top ?? e.clientY
-    setDrag({ path, grabOffset: e.clientY - top, clientY: e.clientY })
-  }
-
-  function onPointerMove(e: PointerEvent<HTMLButtonElement>) {
-    if (!drag) return
-    const box = e.currentTarget.closest<HTMLElement>('[role=dialog]')
-    // Near the sheet's top or bottom edge, scroll it so far rows can be reached.
-    if (box) {
-      const { top, bottom } = box.getBoundingClientRect()
-      if (e.clientY < top + 48) box.scrollTop -= 8
-      else if (e.clientY > bottom - 48) box.scrollTop += 8
-    }
+  /** Move the dragged item to wherever the pointer now points. */
+  function retarget(clientY: number) {
+    const current = dragRef.current
+    if (!current) return
+    const order = orderRef.current
     // The new index is how many of the other rows have their middle above the
     // pointer. Rows differ in height (the More row carries headings), so
     // measure them rather than assume a row height.
     const others = [...(list.current?.querySelectorAll<HTMLElement>('[data-slot]') ?? [])].filter(
-      (el) => el.dataset.slot !== drag.path,
+      (el) => el.dataset.slot !== current.path,
     )
     const target = others.filter((el) => {
       const r = el.getBoundingClientRect()
-      return r.top + r.height / 2 < e.clientY
+      return r.top + r.height / 2 < clientY
     }).length
-    const from = order.indexOf(drag.path)
+    const from = order.indexOf(current.path)
     if (target !== from) {
       const next = moveItem(order, from, target)
       const why = problem(next)
       if (why) showHint(why)
-      else setOrder(next)
+      else commitOrder(next)
     }
-    setDrag({ ...drag, clientY: e.clientY })
+    dragRef.current = { ...current, clientY }
+    setDrag(dragRef.current)
   }
 
-  function onPointerUp() {
-    if (!drag) return
-    setAnnounce(describe(order, drag.path))
-    setDrag(null)
+  // Move/up are tracked on window, not the handle: reordering can re-insert
+  // the dragged row's node, which releases pointer capture.
+  function onPointerDown(e: ReactPointerEvent<HTMLButtonElement>, path: string) {
+    if (e.button !== 0 || dragRef.current) return
+    e.preventDefault()
+    const row = e.currentTarget.closest<HTMLElement>('[data-path]')
+    const box = e.currentTarget.closest<HTMLElement>('[role=dialog]')
+    const top = row?.getBoundingClientRect().top ?? e.clientY
+    const pointerId = e.pointerId
+    dragRef.current = { path, grabOffset: e.clientY - top, clientY: e.clientY }
+    setDrag(dragRef.current)
+
+    // Scroll the sheet while the pointer rests near its top or bottom edge,
+    // so rows out of view can be reached without wiggling.
+    let frame = 0
+    const tick = () => {
+      const current = dragRef.current
+      if (box && current) {
+        const { top: boxTop, bottom } = box.getBoundingClientRect()
+        const step =
+          current.clientY < boxTop + EDGE_PX ? -8 : current.clientY > bottom - EDGE_PX ? 8 : 0
+        if (step) {
+          const before = box.scrollTop
+          box.scrollTop += step
+          if (box.scrollTop !== before) retarget(current.clientY)
+        }
+      }
+      frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) retarget(ev.clientY)
+    }
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return
+      const current = dragRef.current
+      stopDrag.current()
+      if (current) setAnnounce(describe(orderRef.current, current.path))
+    }
+    stopDrag.current = () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      dragRef.current = null
+      setDrag(null)
+      stopDrag.current = () => undefined
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
   }
 
   // --- Keyboard: Space picks up / drops, arrows move, Escape drops ---
@@ -182,7 +251,10 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
       e.preventDefault()
       const from = order.indexOf(path)
       const to = from + (e.key === 'ArrowUp' ? -1 : 1)
-      if (to >= 0 && to < order.length) tryOrder(moveItem(order, from, to), path)
+      if (to >= 0 && to < order.length) {
+        movingRef.current = true
+        if (!tryOrder(moveItem(order, from, to), path)) movingRef.current = false
+      }
     } else if (e.key === 'Escape' && grabbed) {
       e.stopPropagation()
       setGrabbed(null)
@@ -263,12 +335,12 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
                   type="button"
                   aria-label={t('Move {label}', { label: item.label })}
                   aria-pressed={grabbed === path}
+                  data-handle={path}
                   onPointerDown={(e) => onPointerDown(e, path)}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={onPointerUp}
-                  onPointerCancel={onPointerUp}
                   onKeyDown={(e) => onHandleKey(e, path)}
-                  onBlur={() => grabbed === path && setGrabbed(null)}
+                  onBlur={() => {
+                    if (grabbed === path && !movingRef.current) setGrabbed(null)
+                  }}
                   className={cn(
                     'flex h-full w-11 shrink-0 touch-none items-center justify-center text-[var(--color-muted)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500',
                     dragging ? 'cursor-grabbing' : 'cursor-grab',
@@ -306,7 +378,7 @@ export function NavCustomizerSheet({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={() => {
-              setOrder(toOrder(DEFAULT_LAYOUT))
+              commitOrder(toOrder(DEFAULT_LAYOUT))
               setAnnounce(t('Default menu restored. Save to keep it.'))
             }}
             className="text-xs font-medium text-[var(--color-muted)] underline underline-offset-2"

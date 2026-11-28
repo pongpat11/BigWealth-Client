@@ -82,6 +82,38 @@ describe('Customize tab bar', () => {
     expect(tabBar()).toEqual(['Budgets', 'Home', 'Transactions', 'Portfolio', 'More'])
   })
 
+  it('keeps focus and the grab while moving down with the keyboard', async () => {
+    renderApp()
+    const sheet = await openSheet()
+    const handle = sheet.getByRole('button', { name: 'Move Home' })
+    handle.focus()
+    await userEvent.keyboard(' ')
+    await userEvent.keyboard('{ArrowDown}')
+    expect(sheet.getByRole('button', { name: 'Move Home' })).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    expect(sheet.getByRole('button', { name: 'Move Home' })).toHaveFocus()
+    expect(sheet.getByRole('button', { name: 'Move Home' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.keyboard(' ')
+    await userEvent.click(sheet.getByRole('button', { name: 'Save' }))
+    expect(tabBar()).toEqual(['Transactions', 'Portfolio', 'Budgets', 'Home', 'More'])
+  })
+
+  it('finishes a pointer drag released anywhere on the page', async () => {
+    renderApp()
+    const sheet = await openSheet()
+    fireEvent.pointerDown(sheet.getByRole('button', { name: 'Move Budgets' }), {
+      button: 0,
+      clientY: 0,
+    })
+    // jsdom has no layout (every row measures 0), so any positive y means
+    // "below everything": Budgets goes to the end of the More list.
+    fireEvent.pointerMove(window, { clientY: 100 })
+    fireEvent.pointerUp(document.body, { clientY: 100 })
+    await userEvent.click(sheet.getByRole('button', { name: 'Save' }))
+    expect(tabBar()).toEqual(['Home', 'Transactions', 'Portfolio', 'More'])
+    expect(getNavLayout().more.at(-1)).toBe('/budgets')
+  })
+
   it('cancel discards changes; reset restores the default', async () => {
     renderApp()
     let sheet = await openSheet()
