@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
@@ -6,6 +6,7 @@ import { AccountDetail } from './AccountDetail'
 import * as accountsApi from '@/lib/accounts'
 import * as txApi from '@/lib/transactions'
 import * as portfolioApi from '@/lib/portfolio'
+import { handOffDeletedHolding } from '@/lib/holdingHandoff'
 import type { Portfolio } from '@/lib/portfolio'
 import type { Transaction } from '@/lib/transactions'
 
@@ -20,6 +21,7 @@ vi.mock('@/lib/portfolio', async (importOriginal) => ({
   // Keep the formatting helpers; stub only the network call.
   ...(await importOriginal<typeof import('@/lib/portfolio')>()),
   getPortfolio: vi.fn(),
+  deleteHolding: vi.fn(),
 }))
 
 const broker = {
@@ -113,6 +115,24 @@ function renderAt(path: string) {
 
 describe('AccountDetail', () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it('links holdings to their page and takes back a holding deleted there, with undo', async () => {
+    vi.mocked(accountsApi.listAccounts).mockResolvedValue([broker])
+    vi.mocked(txApi.listTransactionPage).mockResolvedValue({ items: [], nextCursor: null })
+    vi.mocked(portfolioApi.getPortfolio).mockResolvedValue(brokerPortfolio)
+    vi.mocked(portfolioApi.deleteHolding).mockResolvedValue(undefined)
+    const ptt = brokerPortfolio.holdings.find((h) => h.symbol === 'PTT')!
+    handOffDeletedHolding(ptt)
+    const user = userEvent.setup()
+    renderAt('/accounts/settrade')
+
+    expect(await screen.findByText('Deleted PTT')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('link', { name: /^PTT/ })).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+    const link = await screen.findByRole('link', { name: /^PTT/ })
+    expect(link).toHaveAttribute('href', `/portfolio/${ptt.id}`)
+    expect(portfolioApi.deleteHolding).not.toHaveBeenCalled()
+  })
 
   it('splits an investment account into cash and holdings and lists them', async () => {
     vi.mocked(accountsApi.listAccounts).mockResolvedValue([broker])

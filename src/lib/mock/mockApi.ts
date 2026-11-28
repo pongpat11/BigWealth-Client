@@ -9,7 +9,7 @@ import type { DashboardSummary, MonthCashFlow } from '../dashboard'
 import type { Goal } from '../goals'
 import type { Label } from '../labels'
 import { nextOccurrenceOnOrAfter, todayKey, type RecurringRule } from '../recurring'
-import { goldUnitOf, type Dividend, type DividendList, type Holding, type Portfolio } from '../portfolio'
+import { goldUnitOf, type Dividend, type DividendList, type Holding, type HoldingDetail, type Portfolio } from '../portfolio'
 import type { Report, ReportRange } from '../reports'
 import type { Transaction, TransactionAccount, TransactionCategory } from '../transactions'
 
@@ -447,6 +447,9 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     const rows = holdings.filter(inAccount).map(valued)
     const totalValueTHB = rows.reduce((s, h) => s + (h.marketValueTHB ?? 0), 0)
     const totalCostTHB = rows.reduce((s, h) => s + (h.costBasisTHB ?? 0), 0)
+    const totalDividendsTHB = dividendRows
+      .filter(inAccount)
+      .reduce((s, d) => s + (d.gross - d.withholdingTax) * thbFactor(d.currency), 0)
     const byClass = new Map<Holding['assetClass'], number>()
     for (const h of rows) {
       byClass.set(h.assetClass, (byClass.get(h.assetClass) ?? 0) + (h.marketValueTHB ?? 0))
@@ -458,6 +461,8 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       totalGainTHB: totalValueTHB - totalCostTHB,
       totalGainPct: totalCostTHB > 0 ? ((totalValueTHB - totalCostTHB) / totalCostTHB) * 100 : null,
       unconvertedCount: 0,
+      totalDividendsTHB,
+      totalReturnTHB: totalValueTHB - totalCostTHB + totalDividendsTHB,
       holdings: rows,
       allocation: [...byClass.entries()]
         .map(([assetClass, valueTHB]) => ({
@@ -480,6 +485,27 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     const existing = holdings.find((x) => x.id === param)
     if (!existing) notFound('Holding')
+    if (method === 'GET') {
+      const h = valued(existing)
+      const dividends = dividendRows
+        .filter((d) => d.symbol === h.symbol && (d.accountId ?? null) === (h.accountId ?? null))
+        .sort((a, b) => b.payDate.localeCompare(a.payDate))
+        .map(withNet)
+      const dividendsNetTHB = dividends.reduce((s, d) => s + d.net * thbFactor(d.currency), 0)
+      const gainTHB = h.marketValueTHB !== null && h.costBasisTHB !== null ? h.marketValueTHB - h.costBasisTHB : null
+      const totalReturnTHB = gainTHB === null ? null : gainTHB + dividendsNetTHB
+      const detail: HoldingDetail = {
+        ...h,
+        fx: mockFx,
+        gainTHB,
+        dividends,
+        dividendsNetTHB,
+        dividendsUnconverted: 0,
+        totalReturnTHB,
+        totalReturnPct: totalReturnTHB !== null && h.costBasisTHB ? (totalReturnTHB / h.costBasisTHB) * 100 : null,
+      }
+      return detail as T
+    }
     if (method === 'PATCH') {
       assertInvestmentAccount(body?.accountId)
       const patch = body as Partial<StoredHolding>
@@ -518,6 +544,17 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       const d = { ...input, accountId: input.accountId ?? null, id: id() }
       dividendRows = [...dividendRows, d]
       return withNet(d) as T
+    }
+    if (method === 'PATCH') {
+      const existing = dividendRows.find((x) => x.id === param)
+      if (!existing) notFound('Dividend')
+      assertInvestmentAccount(body?.accountId)
+      const updated = { ...existing, ...(body as Partial<StoredDividend>) }
+      if (updated.withholdingTax > updated.gross) {
+        throw new ApiError(400, 'Withholding tax cannot exceed the gross amount')
+      }
+      dividendRows = dividendRows.map((x) => (x.id === param ? updated : x))
+      return withNet(updated) as T
     }
     if (method === 'DELETE') {
       dividendRows = dividendRows.filter((x) => x.id !== param)

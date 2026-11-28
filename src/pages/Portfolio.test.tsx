@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { Portfolio } from './Portfolio'
 import * as api from '@/lib/portfolio'
 import * as accountsApi from '@/lib/accounts'
+import { handOffDeletedHolding } from '@/lib/holdingHandoff'
 import type { Account } from '@/lib/accounts'
 import type { DividendList, Holding, Portfolio as PortfolioData } from '@/lib/portfolio'
 
@@ -17,6 +18,7 @@ vi.mock('@/lib/portfolio', async (importOriginal) => ({
   deleteHolding: vi.fn(),
   listDividends: vi.fn(),
   createDividend: vi.fn(),
+  updateDividend: vi.fn(),
   deleteDividend: vi.fn(),
 }))
 vi.mock('@/lib/accounts', () => ({ listAccounts: vi.fn() }))
@@ -166,10 +168,15 @@ describe('Portfolio page', () => {
   })
 
   it('refreshes prices on request and keeps the figures on screen meanwhile', async () => {
+    // The time shown is the newest market quote, not when the page loaded.
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      holdings: [{ ...ptt, autoPrice: true, priceUpdatedAt: '2025-11-01T03:00:00.000Z' }, voo],
+    })
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('฿395,250')
-    expect(screen.getByRole('button', { name: /refresh prices/i })).toHaveTextContent(/updated/i)
+    expect(screen.getByText(/^Prices as of 1 Nov/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /refresh prices/i }))
     expect(screen.getByText('฿395,250')).toBeInTheDocument()
@@ -330,28 +337,6 @@ describe('Portfolio page', () => {
     )
   })
 
-  it('converts the amounts when an edit switches the gold unit', async () => {
-    const bar: Holding = { ...ptt, id: 'bar', accountId: 'settrade', symbol: 'GOLD', assetClass: 'gold', goldUnit: 'baht', quantity: 2, avgCost: 41000, price: 44000 }
-    vi.mocked(api.getPortfolio).mockResolvedValue({ ...portfolio, holdings: [bar] })
-    vi.mocked(api.updateHolding).mockResolvedValue(bar)
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: 'Edit holding GOLD' }))
-    await user.click(screen.getByRole('button', { name: 'Troy ounce' }))
-    expect(screen.getByRole('status')).toHaveTextContent(/converted to troy ounce/i)
-    const oz = api.GOLD_OZ_PER_BAHT
-    expect(screen.getByLabelText('Quantity (troy oz)')).toHaveValue(String(Math.round(2 * oz * 1e8) / 1e8))
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
-    await waitFor(() => expect(api.updateHolding).toHaveBeenCalled())
-    const sent = vi.mocked(api.updateHolding).mock.calls[0][1]
-    expect(sent.goldUnit).toBe('oz')
-    expect(sent.avgCost).toBeCloseTo(41000 / oz, 1)
-    expect(sent.price).toBeCloseTo(44000 / oz, 1)
-    // The value is unchanged.
-    expect(sent.quantity! * sent.price!).toBeCloseTo(2 * 44000, -1)
-  })
-
   it('lists baht-weight and ounce gold apart, each with its total', async () => {
     const gold = (id: string, goldUnit: Holding['goldUnit'], quantity: number, currency: Holding['currency']): Holding => ({
       ...ptt,
@@ -394,59 +379,72 @@ describe('Portfolio page', () => {
     expect(screen.getByLabelText('Currency')).toHaveValue('USD')
   })
 
-  it('updates a price from the edit form', async () => {
-    vi.mocked(api.getPortfolio).mockResolvedValue({
-      ...portfolio,
-      holdings: [{ ...ptt, accountId: 'settrade' }, voo],
-    })
-    vi.mocked(api.updateHolding).mockResolvedValue(ptt)
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /edit holding ptt/i }))
-    const price = screen.getByLabelText(/current price/i)
-    await user.clear(price)
-    await user.type(price, '40')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
-
-    await waitFor(() =>
-      expect(api.updateHolding).toHaveBeenCalledWith('ptt', expect.objectContaining({ price: 40 })),
-    )
-  })
-
-  it('never assigns an unassigned holding to the only account on its own', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: /edit holding ptt/i }))
-    expect(screen.getByLabelText('Account')).toHaveValue('')
-    await user.click(screen.getByRole('button', { name: /save changes/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/choose the account that holds it/i)
-    expect(api.updateHolding).not.toHaveBeenCalled()
-  })
-
-  it('still saves edits when accounts fail to load, and offers a retry', async () => {
+  it('offers a retry when accounts fail to load', async () => {
     vi.mocked(accountsApi.listAccounts).mockRejectedValue(new Error('offline'))
     vi.mocked(api.getPortfolio).mockResolvedValue({
       ...portfolio,
       holdings: [{ ...ptt, accountId: 'settrade' }, voo],
     })
-    vi.mocked(api.updateHolding).mockResolvedValue(ptt)
-    const user = userEvent.setup()
     renderPage()
 
     expect(await screen.findByRole('button', { name: /try again/i })).toBeInTheDocument()
     // The account name isn't known, but it isn't flagged as missing either.
     const thai = screen.getByRole('region', { name: 'Thai Stocks' })
     expect(within(thai).queryByText('No account')).not.toBeInTheDocument()
+  })
 
-    await user.click(screen.getByRole('button', { name: /edit holding ptt/i }))
-    const price = screen.getByLabelText(/current price/i)
-    await user.clear(price)
-    await user.type(price, '40')
+  it('opens a holding\'s page from a row that reads its figures', async () => {
+    renderPage('/portfolio?account=settrade')
+    // No aria-label: the row's own text (symbol, value, gain) is its name.
+    const link = await screen.findByRole('link', { name: /^PTT .*฿191,250.*\+10\.9%/ })
+    expect(link).toHaveAttribute('href', '/portfolio/ptt')
+  })
+
+  it('removes a holding deleted on its page, with undo', async () => {
+    vi.mocked(api.deleteHolding).mockResolvedValue(undefined)
+    handOffDeletedHolding(ptt)
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('฿395,250')
+    await waitFor(() => expect(screen.queryByRole('link', { name: /^PTT / })).not.toBeInTheDocument())
+    expect(screen.getByText('Deleted PTT')).toBeInTheDocument()
+    expect(api.deleteHolding).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /undo/i }))
+    expect(await screen.findByRole('link', { name: /^PTT / })).toBeInTheDocument()
+    expect(api.deleteHolding).not.toHaveBeenCalled()
+  })
+
+  it('still deletes a handed-off holding when the list fails to load', async () => {
+    vi.mocked(api.getPortfolio).mockRejectedValue(new Error('offline'))
+    vi.mocked(api.deleteHolding).mockResolvedValue(undefined)
+    handOffDeletedHolding(ptt)
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('Deleted PTT')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
+    await waitFor(() => expect(api.deleteHolding).toHaveBeenCalledWith('ptt'))
+  })
+
+  it('edits a dividend from the list', async () => {
+    vi.mocked(api.updateDividend).mockResolvedValue(dividends.items[0])
+    const user = userEvent.setup()
+    renderPage('/portfolio?tab=dividends')
+    await screen.findByText('฿2,738')
+
+    await user.click(screen.getByRole('button', { name: 'Edit PTT dividend' }))
+    const gross = screen.getByLabelText('Gross amount')
+    expect(gross).toHaveValue('2400')
+    await user.clear(gross)
+    await user.type(gross, '2500')
+    // It had no account; an edit asks for one rather than picking it silently.
+    await user.selectOptions(screen.getByLabelText('Account'), 'settrade')
     await user.click(screen.getByRole('button', { name: /save changes/i }))
-    await waitFor(() => expect(api.updateHolding).toHaveBeenCalled())
-    expect(vi.mocked(api.updateHolding).mock.calls[0][1]).not.toHaveProperty('accountId')
+    await waitFor(() =>
+      expect(api.updateDividend).toHaveBeenCalledWith('d1', expect.objectContaining({ gross: 2500, withholdingTax: 240 })),
+    )
+    await waitFor(() => expect(api.listDividends).toHaveBeenCalledTimes(2))
   })
 
   it('keeps the holdings sort when switching tabs', async () => {

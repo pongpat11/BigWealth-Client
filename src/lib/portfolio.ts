@@ -106,6 +106,10 @@ export interface Portfolio {
   totalGainPct: number | null
   /** Holdings left out of the totals for lack of an exchange rate. */
   unconvertedCount: number
+  /** Net dividends received to date (same account filter), in THB. Absent from older servers. */
+  totalDividendsTHB?: number
+  /** totalGainTHB + totalDividendsTHB. */
+  totalReturnTHB?: number
   holdings: Holding[]
   allocation: { assetClass: AssetClass; valueTHB: number; pct: number }[]
 }
@@ -129,6 +133,21 @@ export interface DividendInput {
   gross: number
   withholdingTax: number
   accountId?: string
+}
+
+/** One holding with the dividends it paid and its total return. */
+export interface HoldingDetail extends Holding {
+  fx: Fx
+  /** Unrealised gain in THB; null when it can't be converted. */
+  gainTHB: number | null
+  /** Dividends on this symbol into the holding's account, newest first. */
+  dividends: Dividend[]
+  dividendsNetTHB: number
+  /** Dividends left out of dividendsNetTHB for lack of an exchange rate. */
+  dividendsUnconverted: number
+  /** gainTHB + dividends, and as a % of the THB cost. */
+  totalReturnTHB: number | null
+  totalReturnPct: number | null
 }
 
 export interface DividendList {
@@ -159,6 +178,10 @@ export async function getPortfolio(accountId?: string): Promise<Portfolio> {
   return apiFetch<Portfolio>(`/portfolio${query({ accountId })}`, auth())
 }
 
+export async function getHolding(id: string): Promise<HoldingDetail> {
+  return apiFetch<HoldingDetail>(`/holdings/${id}`, auth())
+}
+
 export async function createHolding(input: HoldingInput): Promise<Holding> {
   return apiFetch<Holding>('/holdings', { method: 'POST', body: input, ...auth() })
 }
@@ -178,6 +201,10 @@ export async function listDividends(year?: number, accountId?: string): Promise<
 
 export async function createDividend(input: DividendInput): Promise<Dividend> {
   return apiFetch<Dividend>('/dividends', { method: 'POST', body: input, ...auth() })
+}
+
+export async function updateDividend(id: string, input: Partial<DividendInput>): Promise<Dividend> {
+  return apiFetch<Dividend>(`/dividends/${id}`, { method: 'PATCH', body: input, ...auth() })
 }
 
 export async function deleteDividend(id: string): Promise<void> {
