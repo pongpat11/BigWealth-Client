@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Languages, LogOut, Monitor, Moon, Sun } from 'lucide-react'
+import { ChevronRight, Languages, LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useNavCustomizer } from '@/components/layout/NavCustomizer'
 import { ApiError } from '@/lib/api'
 import { changePassword, logout, me, updateProfile, type AuthUser } from '@/lib/auth'
 import { browserTimezone } from '@/lib/format'
@@ -273,6 +274,7 @@ function PasswordCard() {
 
 export function Settings() {
   const navigate = useNavigate()
+  const customize = useNavCustomizer()
 
   async function handleLogout() {
     await logout()
@@ -301,6 +303,16 @@ export function Settings() {
           <p className="mt-3 text-xs text-[var(--color-muted)]">
             {t("Months and days follow this device's timezone.")}
           </p>
+          {customize && (
+            <button
+              type="button"
+              onClick={customize}
+              className="mt-3 flex w-full items-center justify-between gap-3 border-t border-[var(--color-line)] pt-3 text-sm font-medium text-[var(--color-ink)]"
+            >
+              {t('Customize tab bar')}
+              <ChevronRight size={16} className="text-[var(--color-muted)]" aria-hidden />
+            </button>
+          )}
         </CardBody>
       </Card>
 

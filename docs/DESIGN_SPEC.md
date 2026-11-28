@@ -155,6 +155,7 @@ Build each as a Figma component with variants. States to cover everywhere: **def
 
 ### Navigation
 - **Mobile bottom tab bar:** fixed bottom, `surface` fill, top `line` border, 5 items, safe-area padding. Active = `brand/600` icon+label, inactive = `muted`. Tabs: **Home, Transactions, Portfolio, Budgets, More**.
+  The four slots before More are user-customizable — see §8.11.
 - **Desktop sidebar:** 240px, logo top, vertical nav list (icon + label, active = `brand/50` pill bg + `brand/700` text), user chip bottom.
 - **Top bar (mobile):** page title + optional right action (filter/add). Transparent over canvas.
 
@@ -365,6 +366,37 @@ Answers "how am I doing?" at a glance.
 
 ### 8.10 Auth (login / register / forgot) — *must*
 - Centered card: logo + tagline → email + password → primary "Sign in" → Google OAuth button → links to register / forgot. Client validation (email format, required). Error surfaces inline without reload.
+
+### 8.11 Customize tab bar — *nice*
+Lets you choose and order the tabs in the mobile bottom bar, and order the More list.
+
+```
+┌─────────────────────────────┐
+│ Cancel   Customize tabs [Save]│  sheet header
+│ IN TAB BAR            4 / 4  │
+│ ≡ (⌂) Home              (−)  │  ≡ drag handle · (−) remove
+│ ≡ (⇄) Transactions      (−)  │
+│ ≡ (◔) Portfolio         (−)  │
+│ ≡ (▣) Budgets           (−)  │
+│   (…) More              🔒   │  fixed last slot, not movable
+│ ON THE MORE PAGE  drag to sort│
+│ ≡ (⟳) Recurring         (+)  │  (+) add to tab bar
+│ ≡ (◎) Goals             (+)  │
+│ ...                          │
+│        Reset to default      │
+│ ─── preview ───              │
+│ [Home][Txn][Port][Bud][More] │  live tab-bar preview
+└─────────────────────────────┘
+```
+- **Entry points:** a "Customize tab bar" row at the top of the More page, the same row in Settings → Preferences, and a long-press (500 ms) on the tab bar itself.
+- **Opens in a `Sheet`** (full-height on phones). Changes apply on **Save**; Cancel / backdrop / Escape discards. A live preview of the bar sits at the bottom of the sheet.
+- **Tab bar:** 2–4 user slots, then **More** locked in the last slot (it's the only way to reach everything else). Fewer slots = wider tabs. Any screen can go in a slot, Home included; the first slot is not special.
+- **Rows:** 52 px, drag handle `≡` left (44×44 hit area, `touch-action: none`), 32 px icon circle, label, then a 28 px round button: `(−)` rose tint in the tab-bar list, `(+)` `brand/100` + `brand/700` in the More list.
+- **Moving:** drag within or between the two lists, or use `(+)`/`(−)` (removed items go to the top of the More list; added ones to the end of the bar). Keyboard / screen readers: the handle is a button; Space picks up, ↑/↓ moves, Space drops, with an `aria-live` announcement ("Portfolio, position 3 of 4").
+- **Limits:** adding a 5th or removing the 2nd-last tab doesn't happen — a caption under the list says why ("Tab bar is full — remove one first" / "Keep at least 2 tabs"), in `loss` colour, for 2 s. No disabled buttons.
+- **More page** lists the screens not in the bar, in the saved order, then Log out. **Desktop sidebar** follows the same order: bar items, divider, the rest.
+- **Reset to default** restores Home, Transactions, Portfolio, Budgets + the default More order (applies on Save, like any other change).
+- **Storage:** `localStorage` key `bw.nav.v1` = `{ tabs: string[], more: string[] }` of route paths. On load, unknown paths are dropped and screens added in a later release are appended to `more`, so the menu never loses a screen. Single user, so no server sync for now.
 
 ---
 

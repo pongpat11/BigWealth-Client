@@ -1,37 +1,17 @@
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  BarChart3,
-  ChevronRight,
-  CreditCard,
-  FileDown,
-  Landmark,
-  LogOut,
-  Repeat,
-  Settings,
-  Tag,
-  Tags,
-  Target,
-} from 'lucide-react'
+import { ChevronRight, LayoutGrid, LogOut } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useNavCustomizer } from '@/components/layout/NavCustomizer'
 import { logout } from '@/lib/auth'
 import { t } from '@/lib/i18n'
-
-const items = [
-  { to: '/recurring', label: t('Recurring'), icon: Repeat },
-  { to: '/goals', label: t('Savings Goals'), icon: Target },
-  { to: '/debts', label: t('Debts'), icon: CreditCard },
-  { to: '/reports', label: t('Reports'), icon: BarChart3 },
-  { to: '/export', label: t('Export & tax report'), icon: FileDown },
-  { to: '/accounts', label: t('Accounts'), icon: Landmark },
-  { to: '/categories', label: t('Categories'), icon: Tag },
-  { to: '/labels', label: t('Labels'), icon: Tags },
-  { to: '/settings', label: t('Settings'), icon: Settings },
-] as const
+import { navItem, useNavLayout } from '@/lib/nav'
 
 /** Mobile hub for secondary screens (desktop shows them in the sidebar). */
 export function More() {
   const navigate = useNavigate()
+  const { more } = useNavLayout()
+  const customize = useNavCustomizer()
 
   async function handleLogout() {
     await logout()
@@ -41,9 +21,26 @@ export function More() {
   return (
     <div className="space-y-4">
       <PageHeader title={t('More')} />
+      {customize && (
+        <Card>
+          <CardBody className="p-0 px-4">
+            <button
+              type="button"
+              onClick={customize}
+              className="flex w-full items-center gap-3 py-3.5 text-sm font-medium text-[var(--color-ink)]"
+            >
+              <span className="flex size-9 items-center justify-center rounded-full bg-brand-500/10 text-brand-600">
+                <LayoutGrid size={16} aria-hidden />
+              </span>
+              <span className="flex-1 text-left">{t('Customize tab bar')}</span>
+              <ChevronRight size={16} className="text-[var(--color-muted)]" aria-hidden />
+            </button>
+          </CardBody>
+        </Card>
+      )}
       <Card>
         <CardBody className="divide-y divide-[var(--color-line)] p-0 px-4">
-          {items.map(({ to, label, icon: IconCmp }) => (
+          {more.map(navItem).map(({ to, longLabel: label, icon: IconCmp }) => (
             <Link
               key={to}
               to={to}
