@@ -67,7 +67,11 @@ function TxRow({ tx, accountId }: { tx: Transaction; accountId: string }) {
 function HoldingLine({ holding }: { holding: Holding }) {
   const gain = holding.gainPct
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
+    <Link
+      to={`/portfolio/${holding.id}`}
+      aria-label={t('Open holding {name}', { name: holding.symbol })}
+      className="flex items-center justify-between gap-3 py-3 transition-colors hover:bg-[var(--color-canvas)]"
+    >
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{holding.symbol}</p>
         <p className="tnum text-xs text-[var(--color-muted)]">
@@ -91,7 +95,7 @@ function HoldingLine({ holding }: { holding: Holding }) {
           {gain === null ? '—' : `${gain > 0 ? '▲' : gain < 0 ? '▼' : ''} ${formatPercent(gain)}`.trim()}
         </p>
       </div>
-    </div>
+    </Link>
   )
 }
 

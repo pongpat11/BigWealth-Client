@@ -1,525 +1,60 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { PieChart as PieIcon, Plus, RefreshCw, TriangleAlert } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { PieChart as PieIcon, Plus, RefreshCw } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/Button'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
-import { FieldError, Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { DeleteButton } from '@/components/ui/DeleteButton'
 import { Sheet } from '@/components/ui/Sheet'
+import { DividendForm } from '@/components/portfolio/DividendForm'
+import { DividendTable } from '@/components/portfolio/DividendTable'
+import { HoldingForm } from '@/components/portfolio/HoldingForm'
+import { FxNote, Message } from '@/components/portfolio/shared'
+import {
+  accountLabel,
+  gainText,
+  gainTone,
+  native,
+  priceAge,
+  selectClass,
+} from '@/components/portfolio/format'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
-import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
+import { formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
 import { getLanguage, t } from '@/lib/i18n'
 import {
   ASSET_CLASSES,
-  AUTO_PRICE_CLASSES,
   ASSET_CLASS_META,
-  createDividend,
-  createHolding,
   deleteDividend,
   deleteHolding,
-  defaultGoldUnit,
   getPortfolio,
-  GOLD_OZ_PER_BAHT,
   GOLD_UNITS,
   GOLD_UNIT_META,
   goldUnitOf,
-  holdingGain,
   holdingQuantityText,
   listDividends,
   NO_ACCOUNT,
   roundPercents,
   sortHoldings,
   totalValueTHB,
-  updateHolding,
-  usualWithholdingPct,
   type HoldingSort,
-  type AssetClass,
   type Dividend,
   type DividendList,
-  type Fx,
-  type GoldUnit,
   type Holding,
   type Portfolio as PortfolioData,
 } from '@/lib/portfolio'
-import type { Currency } from '@/types'
 
-const CURRENCIES: Currency[] = ['THB', 'USD']
-const selectClass =
-  'h-11 w-full rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] px-3 text-[15px] text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-brand-500'
-const labelClass = 'text-[13px] font-medium text-[var(--color-muted)]'
-
-/** An amount in its own currency, e.g. "฿38.25" or "$498.00". */
-function native(amount: number, currency: Currency, digits = 2): string {
-  const text = amount.toLocaleString('en-US', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  })
-  return currency === 'THB' ? `฿${text}` : `$${text}`
-}
-
-/**
- * A form amount re-expressed in another gold unit (`factor` = new units per
- * old unit), so the holding keeps its value. Blank or invalid input stays.
- */
-function convertAmount(value: string, factor: number, digits: number): string {
-  const n = Number(value)
-  if (value.trim() === '' || !Number.isFinite(n)) return value
-  return String(Math.round(n * factor * 10 ** digits) / 10 ** digits)
-}
-
-function gainTone(value: number | null): string {
-  if (value === null || value === 0) return 'text-[var(--color-muted)]'
-  return value > 0 ? 'text-[var(--color-gain)]' : 'text-[var(--color-loss)]'
-}
-
-/** A signed amount in its own currency, e.g. "+฿1,250" or "-$12.40". */
-function signedNative(amount: number, currency: Currency): string {
-  if (currency === 'THB') return formatSignedTHB(amount)
-  const sign = amount > 0 ? '+' : amount < 0 ? '-' : ''
-  return `${sign}${native(Math.abs(amount), currency)}`
-}
-
-/**
- * ▲ / ▼, the gain as money and as a percentage, so gains never rely on
- * colour alone: "▲ +฿18,750 · +10.9%".
- */
-function gainText(holding: Holding): string {
-  if (holding.gainPct === null) return '—'
-  const { amount, currency } = holdingGain(holding)
-  const pct = holding.gainPct
-  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : ''
-  return `${arrow} ${signedNative(amount, currency)} · ${formatPercent(pct)}`.trim()
-}
-
-/** A form's validation error, shown under `field` or, without one, above the form. */
-type FormError = { field?: string; message: string } | null
-
-function FxNote({ fx, unconverted }: { fx: Fx; unconverted: number }) {
-  if (fx.usdThb === null) {
-    if (unconverted === 0) return null
-    return (
-      <p role="status" className="flex items-start gap-2 rounded-xl bg-amber-500/15 px-3 py-2 text-sm text-amber-600">
-        <TriangleAlert size={16} aria-hidden className="mt-0.5 shrink-0" />
-        <span>
-          {unconverted === 1
-            ? t('No USD exchange rate is available right now, so 1 USD item is left out of the baht totals.')
-            : t('No USD exchange rate is available right now, so {n} USD items are left out of the baht totals.', {
-                n: unconverted,
-              })}
-        </span>
-      </p>
-    )
-  }
-  return (
-    <p className="tnum px-1 text-xs text-[var(--color-muted)]">
-      {fx.date
-        ? t('USD converted at ฿{rate} (reference rate, {date}).', {
-            rate: fx.usdThb.toFixed(2),
-            date: formatDate(fx.date),
-          })
-        : t('USD converted at ฿{rate} (reference rate).', { rate: fx.usdThb.toFixed(2) })}
-    </p>
-  )
-}
-
-function Message({ children }: { children: string }) {
-  return (
-    <p role="alert" className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-[var(--color-loss)]">
-      {children}
-    </p>
-  )
-}
-
-/** "Settrade · KS Securities": how an account reads in selects and chips. */
-function accountLabel(a: Account): string {
-  return a.institution ? `${a.name} · ${a.institution}` : a.name
-}
-
-/**
- * The account a holding or dividend goes into before the user picks one.
- * `onlyAccount` falls back to the single account when there is no preference.
- */
-function startingAccount(
-  accounts: Account[] | null,
-  preferred?: string | null,
-  onlyAccount = true,
-): string {
-  if (!accounts) return ''
-  if (preferred && accounts.some((a) => a.id === preferred)) return preferred
-  return onlyAccount && accounts.length === 1 ? accounts[0].id : ''
-}
-
-/** Required investment-account select, or a link to create one when there is none. */
-function AccountField({
-  id,
-  accounts,
-  failed,
-  value,
-  onChange,
-  error,
-}: {
-  id: string
-  /** null while loading or when loading failed. */
-  accounts: Account[] | null
-  failed: boolean
-  value: string
-  onChange: (id: string) => void
-  error?: string
-}) {
-  if (accounts === null) {
-    return (
-      <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
-        {failed ? t('Could not load accounts.') : t('Loading…')}
-      </p>
-    )
-  }
-  if (accounts.length === 0) {
-    return (
-      <p className="rounded-xl bg-[var(--color-canvas)] px-3 py-2.5 text-sm text-[var(--color-muted)]">
-        {t('Holdings belong to an investment account.')}{' '}
-        <Link to="/accounts" className="font-semibold text-brand-600 hover:underline">
-          {t('Create an investment account first')}
-        </Link>
-      </p>
-    )
-  }
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className={labelClass}>
-        {t('Account')}
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className={selectClass + (error ? ' border-[var(--color-loss)]' : '')}
-      >
-        {value === '' && <option value="">{t('Choose an account')}</option>}
-        {accounts.map((a) => (
-          <option key={a.id} value={a.id}>
-            {accountLabel(a)}
-          </option>
-        ))}
-      </select>
-      {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
-    </div>
-  )
-}
-
-function HoldingForm({
-  initial,
-  accounts,
-  accountsFailed,
-  defaultAccountId,
-  onDone,
-  onDelete,
-  onClose,
-}: {
-  initial?: Holding
-  /** The user's investment accounts; null while loading or after a failed load. */
-  accounts: Account[] | null
-  accountsFailed: boolean
-  /** Account picked in the page filter, used for new holdings. */
-  defaultAccountId?: string
-  onDone: () => void
-  onDelete: () => void
-  onClose: () => void
-}) {
-  // Derived until the user picks, so it follows accounts that load later.
-  // An existing holding without an account is never assigned silently.
-  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
-  const accountId =
-    pickedAccount ??
-    (initial
-      ? startingAccount(accounts, initial.accountId, false)
-      : startingAccount(accounts, defaultAccountId))
-  const [symbol, setSymbol] = useState(initial?.symbol ?? '')
-  const [name, setName] = useState(initial?.name ?? '')
-  const [assetClass, setAssetClass] = useState<AssetClass>(initial?.assetClass ?? 'set')
-  const [currency, setCurrency] = useState<Currency>(initial?.currency ?? 'THB')
-  const initialUnit = initial ? goldUnitOf(initial) : null
-  const [goldUnit, setGoldUnit] = useState<GoldUnit>(initialUnit ?? 'baht')
-  // Set when an edit switched the unit and the amounts were converted.
-  const [converted, setConverted] = useState(false)
-  const [quantity, setQuantity] = useState(initial ? String(initial.quantity) : '')
-  const [avgCost, setAvgCost] = useState(initial ? String(initial.avgCost) : '')
-  const [price, setPrice] = useState(initial ? String(initial.price) : '')
-  // New SET / US / crypto holdings follow the market unless switched off.
-  const [autoPrice, setAutoPrice] = useState(initial ? Boolean(initial.autoPrice) : true)
-  const canAutoPrice = AUTO_PRICE_CLASSES.includes(assetClass)
-  const followsMarket = canAutoPrice && autoPrice
-  const [error, setError] = useState<FormError>(null)
-  const fieldError = (field: string) => (error?.field === field ? error.message : undefined)
-  const fail = (field: string, message: string) => setError({ field, message })
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const qty = Number(quantity)
-    const cost = Number(avgCost)
-    const current = Number(price)
-    // Edits still save when accounts can't be loaded; the account is then left as it is.
-    if (!accountId && !(initial && accounts === null)) {
-      return fail('account', t('Choose the account that holds it.'))
-    }
-    if (!symbol.trim()) return fail('symbol', t('Enter a symbol.'))
-    if (!Number.isFinite(qty) || qty <= 0) return fail('quantity', t('Enter a quantity greater than 0.'))
-    if (avgCost.trim() === '' || !Number.isFinite(cost) || cost < 0) {
-      return fail('avgCost', t('Enter the average cost per unit.'))
-    }
-    const priceGiven = price.trim() !== ''
-    if (priceGiven ? !Number.isFinite(current) || current < 0 : !followsMarket) {
-      return fail('price', t('Enter the current price per unit.'))
-    }
-    setError(null)
-    setSaving(true)
-    const input = {
-      symbol: symbol.trim().toUpperCase(),
-      name: name.trim() || null,
-      assetClass,
-      // Only when it differs from what the server would assume (the currency's
-      // default for a new holding, the current unit for an edit).
-      ...(assetClass === 'gold' &&
-        goldUnit !== (initialUnit ?? defaultGoldUnit(currency)) && { goldUnit }),
-      currency,
-      quantity: qty,
-      avgCost: cost,
-      ...(priceGiven && { price: current }),
-      autoPrice: followsMarket,
-      ...(accountId && { accountId }),
-    }
-    try {
-      if (initial) await updateHolding(initial.id, input)
-      else await createHolding(input)
-      onDone()
-    } catch (err) {
-      setError({ message: err instanceof ApiError ? err.message : t('Could not save. Try again.') })
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardBody>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">
-            {initial ? t('Edit {name}', { name: initial.symbol }) : t('New holding')}
-          </p>
-          {error && !error.field && <Message>{error.message}</Message>}
-          <AccountField
-            id="holding-account"
-            accounts={accounts}
-            failed={accountsFailed}
-            value={accountId}
-            onChange={setPickedAccount}
-            error={fieldError('account')}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              id="holding-symbol"
-              label={t('Symbol')}
-              placeholder={t('e.g. PTT')}
-              error={fieldError('symbol')}
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-            />
-            <Input
-              id="holding-name"
-              label={t('Name (optional)')}
-              placeholder={t('e.g. PTT PCL')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="holding-class" className={labelClass}>
-                {t('Asset class')}
-              </label>
-              <select
-                id="holding-class"
-                value={assetClass}
-                onChange={(e) => {
-                  const next = e.target.value as AssetClass
-                  setAssetClass(next)
-                  // US stocks, crypto and ounce gold are quoted in dollars.
-                  if (!initial) {
-                    const usd = next === 'us' || next === 'crypto' || (next === 'gold' && goldUnit === 'oz')
-                    setCurrency(usd ? 'USD' : 'THB')
-                  }
-                }}
-                className={selectClass}
-              >
-                {ASSET_CLASSES.map((c) => (
-                  <option key={c} value={c}>
-                    {ASSET_CLASS_META[c].label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="holding-currency" className={labelClass}>
-                {t('Currency')}
-              </label>
-              <select
-                id="holding-currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as Currency)}
-                className={selectClass}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          {assetClass === 'gold' && (
-            <div className="flex flex-col gap-1.5">
-              <span id="holding-unit-label" className={labelClass}>
-                {t('Gold unit')}
-              </span>
-              <div className="flex gap-2" role="group" aria-labelledby="holding-unit-label">
-                {GOLD_UNITS.map((u) => (
-                  <button
-                    key={u}
-                    type="button"
-                    aria-pressed={goldUnit === u}
-                    onClick={() => {
-                      if (goldUnit === u) return
-                      setGoldUnit(u)
-                      if (initial && initial.assetClass === 'gold') {
-                        // Same gold, other unit: convert the amounts so the value holds.
-                        const perOld = u === 'oz' ? GOLD_OZ_PER_BAHT : 1 / GOLD_OZ_PER_BAHT
-                        setQuantity((q) => convertAmount(q, perOld, 8))
-                        setAvgCost((c) => convertAmount(c, 1 / perOld, 2))
-                        setPrice((p) => convertAmount(p, 1 / perOld, 2))
-                        setConverted(u !== initialUnit)
-                      }
-                      // Ounces are usually held in dollars, baht-weight in baht.
-                      if (!initial) setCurrency(u === 'oz' ? 'USD' : 'THB')
-                    }}
-                    className={
-                      'flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ' +
-                      (goldUnit === u
-                        ? 'bg-brand-600 text-white'
-                        : 'border border-[var(--color-line)] bg-[var(--color-surface)] text-[var(--color-muted)]')
-                    }
-                  >
-                    {GOLD_UNIT_META[u].label}
-                  </button>
-                ))}
-              </div>
-              {converted && (
-                <p role="status" className="text-xs text-[var(--color-muted)]">
-                  {t('Quantity and prices converted to {unit}. Check them before saving.', {
-                    unit: GOLD_UNIT_META[goldUnit].label,
-                  })}
-                </p>
-              )}
-            </div>
-          )}
-          <Input
-            id="holding-quantity"
-            label={
-              assetClass !== 'gold'
-                ? t('Quantity')
-                : goldUnit === 'oz'
-                  ? t('Quantity (troy oz)')
-                  : t('Quantity (baht-weight)')
-            }
-            inputMode="decimal"
-            placeholder="0"
-            error={fieldError('quantity')}
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              id="holding-cost"
-              label={t('Average cost / unit')}
-              inputMode="decimal"
-              placeholder="0"
-              error={fieldError('avgCost')}
-              value={avgCost}
-              onChange={(e) => setAvgCost(e.target.value)}
-            />
-            <Input
-              id="holding-price"
-              label={followsMarket ? t('Price / unit (optional)') : t('Current price / unit')}
-              inputMode="decimal"
-              placeholder={followsMarket ? t('Looked up') : '0'}
-              error={fieldError('price')}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-          </div>
-          {canAutoPrice ? (
-            <label className="flex items-center justify-between gap-3 rounded-xl bg-[var(--color-canvas)] px-3 py-2.5">
-              <span className="text-sm text-[var(--color-ink)]">
-                {t('Update price automatically')}
-                <span className="block text-xs text-[var(--color-muted)]">
-                  {assetClass !== 'gold'
-                    ? t('From the market each time you open Portfolio (delayed up to 15 min).')
-                    : goldUnit === 'oz'
-                      ? t('World gold price per troy ounce (gold futures, delayed up to 15 min).')
-                      : t('Estimated per baht-weight of 96.5% gold from the world price; the shop price is a little higher. Enter the quantity in baht-weight, not grams.')}
-                </span>
-              </span>
-              <input
-                type="checkbox"
-                checked={autoPrice}
-                onChange={(e) => setAutoPrice(e.target.checked)}
-                className="size-5 accent-brand-600"
-              />
-            </label>
-          ) : (
-            <p className="text-xs text-[var(--color-muted)]">
-              {t("Prices for {assetClass} aren't fetched automatically. Update the current price here when you want a fresh valuation.", {
-                assetClass: getLanguage() === 'th' ? ASSET_CLASS_META[assetClass].label : ASSET_CLASS_META[assetClass].label.toLowerCase(),
-              })}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              {t('Cancel')}
-            </Button>
-            <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? t('Saving…') : initial ? t('Save changes') : t('Add holding')}
-            </Button>
-          </div>
-          {initial && (
-            <DeleteButton
-              variant="block"
-              label={t('Delete holding')}
-              onClick={onDelete}
-              disabled={saving}
-            />
-          )}
-        </form>
-      </CardBody>
-    </Card>
-  )
-}
-
-/** "live" for a price from the last hour, otherwise when it was set. */
-function priceAge(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime()
-  if (ms < 60 * 60 * 1000) return t('live')
-  return t('as of {date}', { date: formatDate(iso) })
+/** Navigation state the holding page leaves when it deletes a holding, so the undo toast shows here. */
+export interface PortfolioLocationState {
+  deletedHolding?: Holding
 }
 
 function HoldingRow({
   holding,
   account,
-  onEdit,
+  search,
 }: {
   holding: Holding
   /**
@@ -527,13 +62,14 @@ function HoldingRow({
    * '' (name not loaded) shows nothing.
    */
   account?: string | null
-  onEdit: (h: Holding) => void
+  /** The page's query string, kept so "back" returns to the same filter. */
+  search: string
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onEdit(holding)}
-      aria-label={t('Edit holding {name}', { name: holding.symbol })}
+    <Link
+      to={`/portfolio/${holding.id}`}
+      state={{ from: `/portfolio${search}` }}
+      aria-label={t('Open holding {name}', { name: holding.symbol })}
       className="flex w-full items-center justify-between gap-3 py-3 text-left transition-colors hover:bg-[var(--color-canvas)]"
     >
       <div className="min-w-0">
@@ -569,7 +105,7 @@ function HoldingRow({
           {gainText(holding)}
         </p>
       </div>
-    </button>
+    </Link>
   )
 }
 
@@ -615,14 +151,14 @@ function HoldingsTab({
   accountNames,
   sortBy,
   onSortChange,
-  onEdit,
+  search,
 }: {
   portfolio: PortfolioData
   /** Account id -> name for row chips; undefined hides them. */
   accountNames?: Map<string, string>
   sortBy: HoldingSort
   onSortChange: (s: HoldingSort) => void
-  onEdit: (h: Holding) => void
+  search: string
 }) {
   // Whole percentages that add up to 100.
   const allocationPct = roundPercents(portfolio.allocation.map((s) => s.valueTHB))
@@ -742,7 +278,7 @@ function HoldingsTab({
                     key={h.id}
                     holding={h}
                     account={accountNames && (h.accountId ? (accountNames.get(h.accountId) ?? '') : null)}
-                    onEdit={onEdit}
+                    search={search}
                   />
                 ))}
               </CardBody>
@@ -754,231 +290,27 @@ function HoldingsTab({
   )
 }
 
-function DividendForm({
-  accounts,
-  accountsFailed,
-  holdings,
-  defaultAccountId,
-  onDone,
-  onClose,
-}: {
-  accounts: Account[] | null
-  accountsFailed: boolean
-  /** Used to prefill the account from a holding with the same symbol. */
-  holdings: Holding[]
-  defaultAccountId?: string
-  onDone: () => void
-  onClose: () => void
-}) {
-  const [symbol, setSymbol] = useState('')
-  // Until the user picks one, the account follows the symbol (the account of a
-  // holding with that symbol), else the page filter or the only account.
-  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
-  const matches = holdings.filter((h) => h.symbol === symbol.trim().toUpperCase())
-  const heldIn = matches.find(
-    (h) => h.accountId && accounts?.some((a) => a.id === h.accountId),
-  )?.accountId
-  const accountId = pickedAccount ?? heldIn ?? startingAccount(accounts, defaultAccountId)
-  // The holding it was paid on, preferring the one in the chosen account.
-  const held = matches.find((h) => h.accountId === accountId) ?? matches[0]
-  const [payDate, setPayDate] = useState(() => new Date().toLocaleDateString('en-CA'))
-  // Like the account, the currency follows the holding until the user picks one.
-  const [pickedCurrency, setPickedCurrency] = useState<Currency | null>(null)
-  const currency = pickedCurrency ?? held?.currency ?? 'THB'
-  const [gross, setGross] = useState('')
-  const [tax, setTax] = useState('')
-  const [error, setError] = useState<FormError>(null)
-  const fieldError = (field: string) => (error?.field === field ? error.message : undefined)
-  const fail = (field: string, message: string) => setError({ field, message })
-  const [saving, setSaving] = useState(false)
-  // Symbols the user holds, for the symbol field's suggestions.
-  const symbols = useMemo(() => [...new Set(holdings.map((h) => h.symbol))].sort(), [holdings])
-  // One tap fills the usual withholding (10% Thai, 15% US) while tax is empty.
-  const usualPct = usualWithholdingPct(held?.assetClass)
-  const grossNumber = Number(gross)
-  const suggestedTax =
-    usualPct !== null && tax.trim() === '' && gross.trim() !== '' && Number.isFinite(grossNumber) && grossNumber > 0
-      ? Math.round(grossNumber * usualPct) / 100
-      : null
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    const grossValue = Number(gross)
-    const taxValue = tax.trim() === '' ? 0 : Number(tax)
-    if (!accountId) return fail('account', t('Choose the account it was paid into.'))
-    if (!symbol.trim()) return fail('symbol', t('Enter a symbol.'))
-    if (!payDate) return fail('payDate', t('Pick the pay date.'))
-    if (!Number.isFinite(grossValue) || grossValue <= 0) {
-      return fail('gross', t('Enter a gross amount greater than 0.'))
-    }
-    if (!Number.isFinite(taxValue) || taxValue < 0 || taxValue > grossValue) {
-      return fail('tax', t('Withholding tax must be between 0 and the gross amount.'))
-    }
-    setError(null)
-    setSaving(true)
-    try {
-      await createDividend({
-        symbol: symbol.trim().toUpperCase(),
-        payDate,
-        currency,
-        gross: grossValue,
-        withholdingTax: taxValue,
-        accountId,
-      })
-      onDone()
-    } catch (err) {
-      setError({ message: err instanceof ApiError ? err.message : t('Could not save. Try again.') })
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardBody>
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <p className="text-sm font-semibold text-[var(--color-ink)]">{t('New dividend')}</p>
-          {error && !error.field && <Message>{error.message}</Message>}
-          <AccountField
-            id="dividend-account"
-            accounts={accounts}
-            failed={accountsFailed}
-            value={accountId}
-            onChange={setPickedAccount}
-            error={fieldError('account')}
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              id="dividend-symbol"
-              label={t('Symbol')}
-              placeholder={t('e.g. PTT')}
-              list={symbols.length > 0 ? 'dividend-symbols' : undefined}
-              autoComplete="off"
-              error={fieldError('symbol')}
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-            />
-            {symbols.length > 0 && (
-              <datalist id="dividend-symbols">
-                {symbols.map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-            )}
-            <Input
-              id="dividend-date"
-              label={t('Pay date')}
-              type="date"
-              error={fieldError('payDate')}
-              value={payDate}
-              onChange={(e) => setPayDate(e.target.value)}
-            />
-            <Input
-              id="dividend-gross"
-              label={t('Gross amount')}
-              inputMode="decimal"
-              placeholder="0"
-              error={fieldError('gross')}
-              value={gross}
-              onChange={(e) => setGross(e.target.value)}
-            />
-            <div className="flex flex-col gap-1.5">
-              <Input
-                id="dividend-tax"
-                label={t('Withholding tax')}
-                inputMode="decimal"
-                placeholder="0"
-                error={fieldError('tax')}
-                value={tax}
-                onChange={(e) => setTax(e.target.value)}
-              />
-              {suggestedTax !== null && (
-                <button
-                  type="button"
-                  onClick={() => setTax(String(suggestedTax))}
-                  className="tnum self-start rounded-full bg-brand-600/10 px-2.5 py-1 text-xs font-semibold text-brand-600"
-                >
-                  {t('Use {pct}% ({amount})', { pct: usualPct!, amount: native(suggestedTax, currency) })}
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="dividend-currency" className={labelClass}>
-              {t('Currency')}
-            </label>
-            <select
-              id="dividend-currency"
-              value={currency}
-              onChange={(e) => setPickedCurrency(e.target.value as Currency)}
-              className={selectClass}
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="text-xs text-[var(--color-muted)]">
-            {t("Thai stocks usually withhold 10%; US stocks 15–30% depending on your broker's tax form.")}
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>
-              {t('Cancel')}
-            </Button>
-            <Button type="submit" className="flex-1" disabled={saving}>
-              {saving ? t('Saving…') : t('Add dividend')}
-            </Button>
-          </div>
-        </form>
-      </CardBody>
-    </Card>
-  )
-}
-
-function DividendRow({ dividend, onDelete }: { dividend: Dividend; onDelete: () => void }) {
-  return (
-    <tr className="border-t border-[var(--color-line)]">
-      <th scope="row" className="py-3 pr-2 text-left font-normal">
-        <span className="block text-sm font-semibold text-[var(--color-ink)]">
-          {dividend.symbol}
-          {dividend.currency !== 'THB' && (
-            <span className="ml-1.5 rounded-full bg-[var(--color-canvas)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-muted)]">
-              {dividend.currency}
-            </span>
-          )}
-        </span>
-        <span className="text-xs text-[var(--color-muted)]">{formatDate(dividend.payDate)}</span>
-      </th>
-      <td className="tnum px-2 text-right text-xs text-[var(--color-muted)]">
-        {native(dividend.gross, dividend.currency)}
-      </td>
-      <td className="tnum px-2 text-right text-xs text-[var(--color-loss)]">
-        {dividend.withholdingTax > 0 ? `−${native(dividend.withholdingTax, dividend.currency)}` : '—'}
-      </td>
-      <td className="tnum pl-2 text-right text-sm font-semibold text-[var(--color-gain)]">
-        {native(dividend.net, dividend.currency)}
-      </td>
-      <td className="w-10 pl-1 text-right">
-        <DeleteButton label={t('Delete {name} dividend', { name: dividend.symbol })} onClick={onDelete} className="ml-auto" />
-      </td>
-    </tr>
-  )
-}
-
 function DividendsTab({
   accountId,
   reloadKey,
   onChanged,
+  accounts,
+  accountsFailed,
+  holdings,
 }: {
   accountId?: string
   reloadKey: number
   onChanged: () => void
+  /** For the edit form. */
+  accounts: Account[] | null
+  accountsFailed: boolean
+  holdings: Holding[]
 }) {
   const thisYear = new Date().getFullYear()
   const [allYears, setAllYears] = useState(false)
   const [data, setData] = useState<DividendList | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Dividend | null>(null)
 
   useEffect(() => {
     let active = true
@@ -1085,38 +417,30 @@ function DividendsTab({
               </CardBody>
             </Card>
           ) : (
-            <Card>
-              <CardBody className="overflow-x-auto py-1">
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-[11px] font-semibold uppercase tracking-widest text-[var(--color-muted)]">
-                      <th scope="col" className="py-2 pr-2 text-left font-semibold">
-                        {t('Dividend')}
-                      </th>
-                      <th scope="col" className="px-2 text-right font-semibold">
-                        {t('Gross')}
-                      </th>
-                      <th scope="col" className="px-2 text-right font-semibold">
-                        {t('Tax')}
-                      </th>
-                      <th scope="col" className="pl-2 text-right font-semibold">
-                        {t('Net')}
-                      </th>
-                      <th scope="col">
-                        <span className="sr-only">{t('Actions')}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.items.map((d) => (
-                      <DividendRow key={d.id} dividend={d} onDelete={() => handleDelete(d)} />
-                    ))}
-                  </tbody>
-                </table>
-              </CardBody>
-            </Card>
+            <DividendTable items={data.items} onEdit={setEditing} onDelete={handleDelete} />
           )}
         </>
+      )}
+
+      {editing && (
+        <Sheet label={t('Edit dividend')} onClose={() => setEditing(null)}>
+          <DividendForm
+            key={editing.id}
+            initial={editing}
+            accounts={accounts}
+            accountsFailed={accountsFailed}
+            holdings={holdings}
+            onDone={() => {
+              setEditing(null)
+              onChanged()
+            }}
+            onDelete={() => {
+              setEditing(null)
+              handleDelete(editing)
+            }}
+            onClose={() => setEditing(null)}
+          />
+        </Sheet>
       )}
     </>
   )
@@ -1176,9 +500,15 @@ export function Portfolio() {
   const [loadedAt, setLoadedAt] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [form, setForm] = useState<'closed' | 'new' | Holding>('closed')
+  // The add form (editing a holding happens on its own page).
+  const [form, setForm] = useState<'closed' | 'new'>('closed')
   const [reloadKey, setReloadKey] = useState(0)
   const accountFilter = params.get('account') ?? ''
+  const search = params.toString() ? `?${params.toString()}` : ''
+  const location = useLocation()
+  const navigate = useNavigate()
+  // A holding deleted on its own page: removed here, with the undo toast.
+  const deleted = useRef((location.state as PortfolioLocationState | null)?.deletedHolding ?? null)
   // Investment accounts; null until loaded (or when loading failed).
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [accountsFailed, setAccountsFailed] = useState(false)
@@ -1279,6 +609,18 @@ export function Portfolio() {
       onCommitted: () => setReloadKey((k) => k + 1),
     })
   }
+
+  // Once the list is in, hide the holding deleted on its page and offer undo.
+  // The navigation state is cleared so a reload doesn't delete it again.
+  useEffect(() => {
+    const holding = deleted.current
+    if (!holding || portfolio === null) return
+    deleted.current = null
+    navigate({ search }, { replace: true, state: null })
+    handleDeleteHolding(holding)
+    // handleDeleteHolding is recreated each render; this runs once per deletion.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolio])
 
   function switchTab(next: Tab) {
     setForm('closed')
@@ -1424,6 +766,17 @@ export function Portfolio() {
             </span>
             <span className="text-xs text-brand-100">{t('vs cost')}</span>
           </div>
+          {/* Dividends received count towards the return; older servers don't send them. */}
+          {portfolio.totalDividendsTHB !== undefined &&
+            portfolio.totalReturnTHB !== undefined &&
+            portfolio.totalDividendsTHB > 0 && (
+              <p className="tnum mt-2 text-xs text-brand-100">
+                {t('+ {dividends} dividends = {total} total return', {
+                  dividends: formatTHB(portfolio.totalDividendsTHB),
+                  total: formatSignedTHB(portfolio.totalReturnTHB),
+                })}
+              </p>
+            )}
         </section>
       )}
 
@@ -1454,16 +807,13 @@ export function Portfolio() {
         ))}
       </div>
 
-      {form !== 'closed' && tab === 'holdings' && (
-        <Sheet label={form === 'new' ? t('New holding') : t('Edit holding')} onClose={() => setForm('closed')}>
+      {form === 'new' && tab === 'holdings' && (
+        <Sheet label={t('New holding')} onClose={() => setForm('closed')}>
           <HoldingForm
-            key={form === 'new' ? 'new' : form.id}
-            initial={form === 'new' ? undefined : form}
             accounts={accounts}
             accountsFailed={accountsFailed}
             defaultAccountId={filteredAccount}
             onDone={handleChanged}
-            onDelete={() => form !== 'new' && handleDeleteHolding(form)}
             onClose={() => setForm('closed')}
           />
         </Sheet>
@@ -1496,7 +846,7 @@ export function Portfolio() {
               accountNames={accountFilter ? undefined : accountNames}
               sortBy={sortBy}
               onSortChange={setSortBy}
-              onEdit={(h) => setForm(h)}
+              search={search}
             />
           </>
         )}
@@ -1505,6 +855,9 @@ export function Portfolio() {
             accountId={accountFilter || undefined}
             reloadKey={reloadKey}
             onChanged={handleChanged}
+            accounts={accounts}
+            accountsFailed={accountsFailed}
+            holdings={portfolio?.holdings ?? []}
           />
         )}
       </div>
