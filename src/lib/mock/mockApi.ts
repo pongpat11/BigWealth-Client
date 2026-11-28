@@ -526,6 +526,93 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
   }
 
   // Reports -----------------------------------------------------------------
+  // Exports -----------------------------------------------------------------
+  if (resource === 'exports' && method === 'GET') {
+    const q = new URLSearchParams(path.split('?')[1] ?? '')
+    const cell = (v: string | number | null | undefined) => {
+      const s = v === null || v === undefined ? '' : String(v)
+      return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = (rows: (string | number | null | undefined)[][]) =>
+      rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
+    // Days in the browser's zone, as the server uses the timezone param.
+    const localKey = (iso: string) => {
+      const d = new Date(iso)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    const from = q.get('from') ?? ''
+    const to = q.get('to') ?? ''
+    if (param === 'transactions.csv') {
+      const rows = transactions
+        .filter((t) => localKey(t.date) >= from && localKey(t.date) <= to)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((t) => [
+          localKey(t.date), t.type, t.amount, t.currency, t.category?.name, t.subCategory?.name,
+          t.account?.name, t.toAccount?.name, t.labels.map((l) => l.name).join('; '), t.note,
+        ])
+      return csv([['date', 'type', 'amount', 'currency', 'category', 'subcategory', 'account', 'to_account', 'labels', 'note'], ...rows]) as T
+    }
+    if (param === 'dividends.csv') {
+      const rows = dividendRows
+        .filter((d) => d.payDate >= from && d.payDate <= to)
+        .sort((a, b) => a.payDate.localeCompare(b.payDate))
+        .map((d) => [d.payDate, d.symbol, accounts.find((a) => a.id === d.accountId)?.name, d.currency, d.gross, d.withholdingTax, d.gross - d.withholdingTax])
+      return csv([['pay_date', 'symbol', 'account', 'currency', 'gross', 'withholding_tax', 'net'], ...rows]) as T
+    }
+    if (param === 'tax-summary') {
+      const year = Number(q.get('year'))
+      const inYear = (iso: string) => Number(iso.slice(0, 4)) === year
+      const totals = (type: 'income' | 'expense') => {
+        const m = new Map<string | null, number>()
+        for (const t of transactions) {
+          if (t.type !== type || t.currency !== 'THB' || !inYear(t.date)) continue
+          m.set(t.categoryId, (m.get(t.categoryId) ?? 0) + t.amount)
+        }
+        const byCategory = [...m.entries()]
+          .map(([categoryId, amount]) => ({
+            categoryId,
+            name: categories.find((c) => c.id === categoryId)?.name ?? 'Uncategorized',
+            amount,
+          }))
+          .sort((a, b) => b.amount - a.amount)
+        return { total: byCategory.reduce((s, c) => s + c.amount, 0), byCategory }
+      }
+      const groups = new Map<string, { symbol: string; currency: string; count: number; gross: number; withholdingTax: number }>()
+      for (const d of dividendRows.filter((x) => inYear(x.payDate))) {
+        const g = groups.get(`${d.symbol}|${d.currency}`) ?? { symbol: d.symbol, currency: d.currency, count: 0, gross: 0, withholdingTax: 0 }
+        g.count += 1
+        g.gross += d.gross
+        g.withholdingTax += d.withholdingTax
+        groups.set(`${d.symbol}|${d.currency}`, g)
+      }
+      const bySymbol = [...groups.values()].map((g) => {
+        const f = thbFactor(g.currency)
+        const net = g.gross - g.withholdingTax
+        return { ...g, net, grossTHB: g.gross * f, withholdingTaxTHB: g.withholdingTax * f, netTHB: net * f }
+      })
+      const totalGrossTHB = bySymbol.reduce((s, r) => s + r.grossTHB, 0)
+      const totalTaxTHB = bySymbol.reduce((s, r) => s + r.withholdingTaxTHB, 0)
+      return {
+        year,
+        timezone: q.get('timezone') ?? 'UTC',
+        generatedAt: now(),
+        income: totals('income'),
+        expense: totals('expense'),
+        nonThbTransactionCount: 0,
+        dividends: {
+          bySymbol,
+          totalGrossTHB,
+          totalTaxTHB,
+          totalNetTHB: totalGrossTHB - totalTaxTHB,
+          unconvertedCount: 0,
+          fxRate: bySymbol.some((r) => r.currency !== 'THB') ? MOCK_USD_THB : null,
+          fxDate: bySymbol.some((r) => r.currency !== 'THB') ? now().slice(0, 10) : null,
+        },
+      } as T
+    }
+    notFound('Endpoint')
+  }
+
   if (resource === 'reports' && param === 'summary' && method === 'GET') {
     const range = (new URLSearchParams(path.split('?')[1] ?? '').get('range') ?? '3M') as ReportRange
     const today = new Date()

@@ -31,6 +31,8 @@ interface RequestOptions {
   /** Bearer token for authenticated requests. */
   token?: string
   signal?: AbortSignal
+  /** 'text' returns the body as a string (CSV downloads) instead of parsed JSON. */
+  responseType?: 'json' | 'text'
 }
 
 export async function apiFetch<T>(
@@ -38,7 +40,7 @@ export async function apiFetch<T>(
   options: RequestOptions = {},
   _retried = false,
 ): Promise<T> {
-  const { method = 'GET', body, token, signal } = options
+  const { method = 'GET', body, token, signal, responseType = 'json' } = options
 
   if (USE_MOCK) {
     const { mockFetch } = await import('./mock/mockApi')
@@ -61,6 +63,8 @@ export async function apiFetch<T>(
     // Network failure / server unreachable
     throw new ApiError(0, t('Cannot reach the server. Please try again.'))
   }
+
+  if (res.ok && responseType === 'text') return (await res.text()) as T
 
   const isJson = res.headers.get('content-type')?.includes('application/json')
   const payload = isJson ? await res.json().catch(() => undefined) : undefined

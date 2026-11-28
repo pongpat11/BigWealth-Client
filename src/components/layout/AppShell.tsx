@@ -4,6 +4,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   CreditCard,
+  FileDown,
   Home,
   Landmark,
   LogOut,
@@ -38,6 +39,7 @@ const secondaryNav = [
   { to: '/goals', label: t('Goals'), icon: Target },
   { to: '/debts', label: t('Debts'), icon: CreditCard },
   { to: '/reports', label: t('Reports'), icon: BarChart3 },
+  { to: '/export', label: t('Export'), icon: FileDown },
   { to: '/accounts', label: t('Accounts'), icon: Landmark },
   { to: '/categories', label: t('Categories'), icon: Tag },
   { to: '/labels', label: t('Labels'), icon: Tags },
@@ -137,7 +139,7 @@ export function AppShell() {
   return (
     <div className="min-h-full lg:flex">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 shrink-0 flex-col gap-6 border-r border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-5 lg:flex">
+      <aside className="hidden print:!hidden w-60 shrink-0 flex-col gap-6 border-r border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-5 lg:flex">
         <div className="flex items-center gap-2.5 px-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">
             ฿
@@ -172,7 +174,7 @@ export function AppShell() {
           if (!NO_TRANSACTION_DATA.has(pathname)) setDataVersion((v) => v + 1)
         }}
       >
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6">
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6 print:max-w-none print:p-0">
           <OfflineBanner />
           {/* Keyed by path so a crashed screen clears when you navigate away. */}
           <ErrorBoundary key={`${pathname}#${dataVersion}`}>
@@ -184,7 +186,7 @@ export function AppShell() {
       {/* Mobile bottom tab bar */}
       <nav
         aria-label={t('Primary')}
-        className="fixed inset-x-0 bottom-0 z-20 flex border-t border-[var(--color-line)] bg-[var(--color-surface)] px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1 lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 flex print:hidden border-t border-[var(--color-line)] bg-[var(--color-surface)] px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1 lg:hidden"
       >
         {primaryNav.map((item) => (
           <TabLink key={item.to} {...item} />

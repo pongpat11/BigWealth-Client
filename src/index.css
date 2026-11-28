@@ -104,3 +104,25 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing (the Export screen's tax report): always light, on white paper. */
+@media print {
+  :root,
+  .dark {
+    --color-ink: #0f172a;
+    --color-muted: #475569;
+    --color-line: #cbd5e1;
+    --color-surface: #ffffff;
+    --color-canvas: #ffffff;
+    --shadow-card: none;
+  }
+  html,
+  body,
+  #root {
+    height: auto;
+    background: #ffffff;
+  }
+  @page {
+    margin: 16mm;
+  }
+}

@@ -15,6 +15,7 @@ import { NotFound } from '@/pages/NotFound'
 import { Portfolio } from '@/pages/Portfolio'
 import { Recurring } from '@/pages/Recurring'
 import { Reports } from '@/pages/Reports'
+import { Export } from '@/pages/Export'
 import { Settings } from '@/pages/Settings'
 import { Transactions } from '@/pages/Transactions'
 import { ImportTransactions } from '@/pages/ImportTransactions'
@@ -39,6 +40,7 @@ function App() {
           <Route path="/goals" element={<Goals />} />
           <Route path="/debts" element={<Debts />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/export" element={<Export />} />
           <Route path="/accounts" element={<Accounts />} />
           <Route path="/accounts/:id" element={<AccountDetail />} />
           <Route path="/settings" element={<Settings />} />
