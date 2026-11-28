@@ -28,8 +28,32 @@ const PRESETS: { value: RangePreset; label: string }[] = [
 const errorText = (err: unknown, fallback: string) =>
   err instanceof ApiError ? err.message : fallback
 
+/**
+ * useState that survives the screen remounting for the session (a quick add
+ * remounts screens that show transaction data).
+ */
+function useSessionState<T>(key: string, initial: () => T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = sessionStorage.getItem(key)
+      if (stored !== null) return JSON.parse(stored) as T
+    } catch {
+      // Storage blocked or bad JSON: fall back to the default.
+    }
+    return initial()
+  })
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // Not saved; the default comes back after a remount.
+    }
+  }, [key, value])
+  return [value, setValue] as const
+}
+
 function CsvCard() {
-  const [range, setRange] = useState(() => presetRange('thisYear'))
+  const [range, setRange] = useSessionState('bw.export.range', () => presetRange('thisYear'))
   const [busy, setBusy] = useState<CsvKind | null>(null)
   const [error, setError] = useState<string | null>(null)
   const invalid = !range.from || !range.to || range.from > range.to
@@ -235,6 +259,13 @@ function TaxReport({ summary }: { summary: TaxSummary }) {
         <CategoryTable caption={t('Income (THB)')} rows={summary.income.byCategory} total={summary.income.total} />
         <CategoryTable caption={t('Expenses (THB)')} rows={summary.expense.byCategory} total={summary.expense.total} />
       </section>
+      {d.bySymbol.length > 0 && summary.income.byCategory.length > 0 && (
+        <p className="text-xs text-[var(--color-muted)]">
+          {t(
+            'If you also record dividends as income transactions, they appear in both the Income table and the Dividends section. Count them once.',
+          )}
+        </p>
+      )}
       {summary.nonThbTransactionCount > 0 && (
         <p className="text-xs text-[var(--color-muted)]">
           {t('{count} transactions in other currencies are not included.', {
@@ -253,7 +284,9 @@ function TaxCard() {
   const thisYear = new Date().getFullYear()
   const years = Array.from({ length: 5 }, (_, i) => thisYear - i)
   // Before April most people are filing for last year.
-  const [year, setYear] = useState(() => (new Date().getMonth() < 3 ? thisYear - 1 : thisYear))
+  const [year, setYear] = useSessionState('bw.export.year', () =>
+    new Date().getMonth() < 3 ? thisYear - 1 : thisYear,
+  )
   const [summary, setSummary] = useState<TaxSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
 

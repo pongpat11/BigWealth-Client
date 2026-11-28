@@ -19,7 +19,7 @@ export function UndoToast({
   onDismiss: () => void
 }) {
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 flex justify-center px-4 lg:bottom-6 lg:justify-end lg:px-8">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-50 flex print:hidden justify-center px-4 lg:bottom-6 lg:justify-end lg:px-8">
       <div
         role={tone === 'error' ? 'alert' : 'status'}
         className={cn(

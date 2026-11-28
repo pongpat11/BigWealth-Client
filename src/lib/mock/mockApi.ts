@@ -535,14 +535,19 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
     }
     const csv = (rows: (string | number | null | undefined)[][]) =>
       rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
+    // Days in the browser's zone, as the server uses the timezone param.
+    const localKey = (iso: string) => {
+      const d = new Date(iso)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
     const from = q.get('from') ?? ''
     const to = q.get('to') ?? ''
     if (param === 'transactions.csv') {
       const rows = transactions
-        .filter((t) => t.date.slice(0, 10) >= from && t.date.slice(0, 10) <= to)
+        .filter((t) => localKey(t.date) >= from && localKey(t.date) <= to)
         .sort((a, b) => a.date.localeCompare(b.date))
         .map((t) => [
-          t.date.slice(0, 10), t.type, t.amount, t.currency, t.category?.name, t.subCategory?.name,
+          localKey(t.date), t.type, t.amount, t.currency, t.category?.name, t.subCategory?.name,
           t.account?.name, t.toAccount?.name, t.labels.map((l) => l.name).join('; '), t.note,
         ])
       return csv([['date', 'type', 'amount', 'currency', 'category', 'subcategory', 'account', 'to_account', 'labels', 'note'], ...rows]) as T
@@ -574,11 +579,11 @@ export async function mockFetch<T>(path: string, method: string, body: Body): Pr
       }
       const groups = new Map<string, { symbol: string; currency: string; count: number; gross: number; withholdingTax: number }>()
       for (const d of dividendRows.filter((x) => inYear(x.payDate))) {
-        const g = groups.get(d.symbol) ?? { symbol: d.symbol, currency: d.currency, count: 0, gross: 0, withholdingTax: 0 }
+        const g = groups.get(`${d.symbol}|${d.currency}`) ?? { symbol: d.symbol, currency: d.currency, count: 0, gross: 0, withholdingTax: 0 }
         g.count += 1
         g.gross += d.gross
         g.withholdingTax += d.withholdingTax
-        groups.set(d.symbol, g)
+        groups.set(`${d.symbol}|${d.currency}`, g)
       }
       const bySymbol = [...groups.values()].map((g) => {
         const f = thbFactor(g.currency)

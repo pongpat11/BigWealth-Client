@@ -590,4 +590,6 @@ export const th: Record<string, string> = {
     'เงินปันผลพร้อมภาษีหัก ณ ที่จ่าย และรายรับรายจ่ายตามหมวดหมู่ ของปีปฏิทินที่เลือก',
   'Tax year': 'ปีภาษี',
   'Print or save as PDF': 'พิมพ์หรือบันทึกเป็น PDF',
+  'If you also record dividends as income transactions, they appear in both the Income table and the Dividends section. Count them once.':
+    'ถ้าคุณบันทึกเงินปันผลเป็นรายการรายรับด้วย จะปรากฏทั้งในตารางรายรับและส่วนเงินปันผล ให้นับเพียงครั้งเดียว',
 }

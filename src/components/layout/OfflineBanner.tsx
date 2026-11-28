@@ -25,7 +25,7 @@ export function OfflineBanner() {
   return (
     <div
       role="status"
-      className="mb-4 flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-600"
+      className="mb-4 flex print:hidden items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-2 text-sm font-medium text-amber-600"
     >
       <WifiOff size={16} aria-hidden className="shrink-0" />
       {t("You're offline. Data can't load or save until you reconnect.")}

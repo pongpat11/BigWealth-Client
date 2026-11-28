@@ -53,6 +53,7 @@ describe('presetRange', () => {
 describe('Export page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    sessionStorage.clear()
     vi.mocked(api.getTaxSummary).mockResolvedValue(summary)
   })
 
@@ -72,9 +73,10 @@ describe('Export page', () => {
   it('loads another year when picked', async () => {
     render(<Export />)
     await screen.findByText('Tax summary 2026')
-    const lastYear = new Date().getFullYear() - 1
-    await userEvent.click(screen.getByRole('button', { name: String(lastYear) }))
-    await waitFor(() => expect(api.getTaxSummary).toHaveBeenLastCalledWith(lastYear))
+    // Never the default (that's this year or, before April, last year).
+    const older = new Date().getFullYear() - 2
+    await userEvent.click(screen.getByRole('button', { name: String(older) }))
+    await waitFor(() => expect(api.getTaxSummary).toHaveBeenLastCalledWith(older))
   })
 
   it('downloads the transactions CSV for the chosen range', async () => {
@@ -99,6 +101,24 @@ describe('Export page', () => {
     await userEvent.type(from, '2099-01-01')
     expect(screen.getByText('Pick a start date on or before the end date.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Dividends CSV' })).toBeDisabled()
+  })
+
+  it('keeps the chosen range and year when the screen remounts', async () => {
+    const { unmount } = render(<Export />)
+    await screen.findByText('Tax summary 2026')
+    await userEvent.click(screen.getByRole('button', { name: 'Last month' }))
+    const older = new Date().getFullYear() - 2
+    await userEvent.click(screen.getByRole('button', { name: String(older) }))
+    unmount()
+    render(<Export />)
+    expect(screen.getByRole('button', { name: 'Last month' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: String(older) })).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(api.getTaxSummary).toHaveBeenLastCalledWith(older))
+  })
+
+  it('warns that dividends recorded as income would be counted twice', async () => {
+    render(<Export />)
+    expect(await screen.findByText(/Count them once/)).toBeInTheDocument()
   })
 
   it('shows the server error when a download fails', async () => {
