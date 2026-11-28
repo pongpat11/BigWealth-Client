@@ -23,12 +23,15 @@ import {
   type HoldingDetail as HoldingDetailData,
 } from '@/lib/portfolio'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
-import type { PortfolioLocationState } from './Portfolio'
+import { handOffDeletedHolding } from '@/lib/holdingHandoff'
 
-/** Where "back" goes: the Portfolio list the user came from (with its filter), else the plain list. */
-function useBackTo(): string {
-  const state = useLocation().state as { from?: string } | null
-  return state?.from?.startsWith('/portfolio') ? state.from : '/portfolio'
+/**
+ * Where the user came from: the Portfolio list (with its filter) or an
+ * account page, from the link's state; null when the page was opened directly.
+ */
+function useCameFrom(): string | null {
+  const from = (useLocation().state as { from?: string } | null)?.from
+  return from && (from.startsWith('/portfolio') || from.startsWith('/accounts/')) ? from : null
 }
 
 export function HoldingDetail() {
@@ -39,7 +42,8 @@ export function HoldingDetail() {
 
 function HoldingDetailView({ id }: { id: string }) {
   const navigate = useNavigate()
-  const backTo = useBackTo()
+  const cameFrom = useCameFrom()
+  const backTo = cameFrom ?? '/portfolio'
   // undefined while loading, null when it doesn't exist (or isn't the user's).
   const [holding, setHolding] = useState<HoldingDetailData | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
@@ -98,11 +102,14 @@ function HoldingDetailView({ id }: { id: string }) {
     setReloadKey((k) => k + 1)
   }
 
-  // The list does the delete, with its Undo window.
+  // The screen the user returns to does the delete, with its Undo window.
+  // Going back in history (when they came from inside the app) leaves no
+  // duplicate entry; opened directly, the page is replaced by Portfolio.
   function handleDeleteHolding() {
     if (!holding) return
-    const state: PortfolioLocationState = { deletedHolding: holding }
-    navigate(backTo, { replace: true, state })
+    handOffDeletedHolding(holding)
+    if (cameFrom) navigate(-1)
+    else navigate('/portfolio', { replace: true })
   }
 
   const back = (
@@ -111,7 +118,7 @@ function HoldingDetailView({ id }: { id: string }) {
       className="inline-flex items-center gap-1 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)]"
     >
       <ArrowLeft size={16} aria-hidden />
-      {t('Portfolio')}
+      {backTo.startsWith('/accounts/') ? t('Account') : t('Portfolio')}
     </Link>
   )
 

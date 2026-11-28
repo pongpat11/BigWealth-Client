@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PieChart as PieIcon, Plus, RefreshCw } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { Button } from '@/components/ui/Button'
@@ -20,9 +20,10 @@ import {
   selectClass,
 } from '@/components/portfolio/format'
 import { reinsert, useUndoableDelete } from '@/lib/useUndoableDelete'
+import { useDeletedHolding } from '@/lib/holdingHandoff'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
-import { formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
+import { formatDate, formatPercent, formatSignedTHB, formatTHB } from '@/lib/format'
 import { getLanguage, t } from '@/lib/i18n'
 import {
   ASSET_CLASSES,
@@ -46,11 +47,6 @@ import {
   type Portfolio as PortfolioData,
 } from '@/lib/portfolio'
 
-/** Navigation state the holding page leaves when it deletes a holding, so the undo toast shows here. */
-export interface PortfolioLocationState {
-  deletedHolding?: Holding
-}
-
 function HoldingRow({
   holding,
   account,
@@ -69,7 +65,6 @@ function HoldingRow({
     <Link
       to={`/portfolio/${holding.id}`}
       state={{ from: `/portfolio${search}` }}
-      aria-label={t('Open holding {name}', { name: holding.symbol })}
       className="flex w-full items-center justify-between gap-3 py-3 text-left transition-colors hover:bg-[var(--color-canvas)]"
     >
       <div className="min-w-0">
@@ -496,8 +491,7 @@ export function Portfolio() {
   // Lives here so the choice survives switching to Dividends and back.
   const [sortBy, setSortBy] = useState<HoldingSort>('value')
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null)
-  // When the shown figures were loaded, and whether a reload is under way.
-  const [loadedAt, setLoadedAt] = useState<Date | null>(null)
+  // Whether a reload is under way (the figures stay on screen meanwhile).
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The add form (editing a holding happens on its own page).
@@ -505,10 +499,8 @@ export function Portfolio() {
   const [reloadKey, setReloadKey] = useState(0)
   const accountFilter = params.get('account') ?? ''
   const search = params.toString() ? `?${params.toString()}` : ''
-  const location = useLocation()
-  const navigate = useNavigate()
-  // A holding deleted on its own page: removed here, with the undo toast.
-  const deleted = useRef((location.state as PortfolioLocationState | null)?.deletedHolding ?? null)
+  // Holdings deleted but still inside their undo window.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
   // Investment accounts; null until loaded (or when loading failed).
   const [accounts, setAccounts] = useState<Account[] | null>(null)
   const [accountsFailed, setAccountsFailed] = useState(false)
@@ -535,7 +527,6 @@ export function Portfolio() {
       .then((data) => {
         if (!active) return
         setPortfolio(data)
-        setLoadedAt(new Date())
         if (!accountFilter || accountFilter === NO_ACCOUNT) {
           setHasUnassigned(data.holdings.some((h) => !h.accountId))
         }
@@ -596,31 +587,43 @@ export function Portfolio() {
 
   const undoable = useUndoableDelete()
 
-  function handleDeleteHolding(holding: Holding) {
-    setForm('closed')
-    const index = (portfolio?.holdings ?? []).findIndex((h) => h.id === holding.id)
-    const setHoldings = (fn: (rows: Holding[]) => Holding[]) =>
-      setPortfolio((p) => (p ? { ...p, holdings: fn(p.holdings) } : p))
+  // A holding deleted on its own page: hidden here with the undo toast. Hiding
+  // by id works before the list has loaded (or if loading fails), so the
+  // delete is never dropped.
+  useDeletedHolding((holding) => {
     undoable.remove({
       message: t('Deleted {name}', { name: holding.symbol }),
-      hide: () => setHoldings((rows) => rows.filter((h) => h.id !== holding.id)),
-      restore: () => setHoldings((rows) => reinsert(rows, holding, index)),
+      hide: () => setHidden((s) => new Set(s).add(holding.id)),
+      restore: () =>
+        setHidden((s) => {
+          const next = new Set(s)
+          next.delete(holding.id)
+          return next
+        }),
       commit: () => deleteHolding(holding.id),
       onCommitted: () => setReloadKey((k) => k + 1),
     })
-  }
-
-  // Once the list is in, hide the holding deleted on its page and offer undo.
-  // The navigation state is cleared so a reload doesn't delete it again.
-  useEffect(() => {
-    const holding = deleted.current
-    if (!holding || portfolio === null) return
-    deleted.current = null
-    navigate({ search }, { replace: true, state: null })
-    handleDeleteHolding(holding)
-    // handleDeleteHolding is recreated each render; this runs once per deletion.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  })
+  // When the newest market price was quoted (not when the page loaded: a slow
+  // feed answers with older prices). Shown as a time today, else a date.
+  const pricesAsOf = useMemo(() => {
+    const times = (portfolio?.holdings ?? [])
+      .filter((h) => h.autoPrice)
+      .map((h) => new Date(h.priceUpdatedAt).getTime())
+    if (times.length === 0) return null
+    const latest = new Date(Math.max(...times))
+    return latest.toDateString() === new Date().toDateString()
+      ? latest.toLocaleTimeString(getLanguage() === 'th' ? 'th-TH' : 'en-GB', { hour: '2-digit', minute: '2-digit' })
+      : formatDate(latest.toISOString())
   }, [portfolio])
+  // The portfolio without the holdings inside their undo window.
+  const shown = useMemo(
+    () =>
+      portfolio && hidden.size > 0
+        ? { ...portfolio, holdings: portfolio.holdings.filter((h) => !hidden.has(h.id)) }
+        : portfolio,
+    [portfolio, hidden],
+  )
 
   function switchTab(next: Tab) {
     setForm('closed')
@@ -730,31 +733,27 @@ export function Portfolio() {
             <p className="text-[11px] font-semibold uppercase tracking-widest text-brand-100">
               {t('Total value')}
             </p>
-            <button
-              type="button"
-              onClick={refresh}
-              disabled={refreshing}
-              aria-label={t('Refresh prices')}
-              className="-m-2 flex items-center gap-1.5 rounded-full p-2 text-[11px] text-brand-100 transition-colors hover:text-white disabled:opacity-70"
-            >
-              {loadedAt && (
-                <span className="tnum">
-                  {refreshing
-                    ? t('Updating…')
-                    : t('Updated {time}', {
-                        time: loadedAt.toLocaleTimeString(getLanguage() === 'th' ? 'th-TH' : 'en-GB', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        }),
-                      })}
-                </span>
-              )}
-              <RefreshCw
-                size={14}
-                aria-hidden
-                className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''}
-              />
-            </button>
+            <div className="-m-2 flex items-center gap-0.5 text-[11px] text-brand-100">
+              {/* Announced to screen readers when it changes. */}
+              <span className="tnum" aria-live="polite">
+                {refreshing
+                  ? t('Updating…')
+                  : pricesAsOf && t('Prices as of {when}', { when: pricesAsOf })}
+              </span>
+              <button
+                type="button"
+                onClick={refresh}
+                disabled={refreshing}
+                aria-label={t('Refresh prices')}
+                className="rounded-full p-2 transition-colors hover:text-white disabled:opacity-70"
+              >
+                <RefreshCw
+                  size={14}
+                  aria-hidden
+                  className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''}
+                />
+              </button>
+            </div>
           </div>
           <p className="tnum mt-1 text-[34px] font-bold leading-tight">
             {formatTHB(portfolio.totalValueTHB)}
@@ -791,7 +790,8 @@ export function Portfolio() {
             type="button"
             role="tab"
             aria-selected={tab === value}
-            aria-controls={`portfolio-panel-${value}`}
+            // Only the open tab's panel is rendered, so only it points at one.
+            aria-controls={tab === value ? `portfolio-panel-${value}` : undefined}
             tabIndex={tab === value ? 0 : -1}
             onKeyDown={onTabKey}
             onClick={() => switchTab(value)}
@@ -823,7 +823,7 @@ export function Portfolio() {
           <DividendForm
             accounts={accounts}
             accountsFailed={accountsFailed}
-            holdings={portfolio?.holdings ?? []}
+            holdings={shown?.holdings ?? []}
             defaultAccountId={filteredAccount}
             onDone={handleChanged}
             onClose={() => setForm('closed')}
@@ -838,11 +838,11 @@ export function Portfolio() {
         aria-labelledby={`portfolio-tab-${tab}`}
         className="space-y-4"
       >
-        {tab === 'holdings' && portfolio !== null && (
+        {tab === 'holdings' && shown !== null && (
           <>
-            <FxNote fx={portfolio.fx} unconverted={portfolio.unconvertedCount} />
+            <FxNote fx={shown.fx} unconverted={shown.unconvertedCount} />
             <HoldingsTab
-              portfolio={portfolio}
+              portfolio={shown}
               accountNames={accountFilter ? undefined : accountNames}
               sortBy={sortBy}
               onSortChange={setSortBy}
@@ -857,7 +857,7 @@ export function Portfolio() {
             onChanged={handleChanged}
             accounts={accounts}
             accountsFailed={accountsFailed}
-            holdings={portfolio?.holdings ?? []}
+            holdings={shown?.holdings ?? []}
           />
         )}
       </div>

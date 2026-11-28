@@ -6,6 +6,7 @@ import { HoldingDetail } from './HoldingDetail'
 import * as api from '@/lib/portfolio'
 import * as accountsApi from '@/lib/accounts'
 import { ApiError } from '@/lib/api'
+import { takeDeletedHolding } from '@/lib/holdingHandoff'
 import type { Account } from '@/lib/accounts'
 import type { HoldingDetail as HoldingDetailData } from '@/lib/portfolio'
 
@@ -16,6 +17,7 @@ vi.mock('@/lib/portfolio', async (importOriginal) => ({
   createDividend: vi.fn(),
   updateDividend: vi.fn(),
   deleteDividend: vi.fn(),
+  deleteHolding: vi.fn(),
 }))
 vi.mock('@/lib/accounts', () => ({ listAccounts: vi.fn() }))
 
@@ -57,22 +59,23 @@ const ptt: HoldingDetailData = {
   totalReturnPct: 12.12,
 }
 
-/** Shows where the page navigated to, and with what state. */
+/** Shows where the page navigated to. */
 function Where() {
   const location = useLocation()
-  return (
-    <p data-testid="where">
-      {location.pathname + location.search} {JSON.stringify(location.state)}
-    </p>
-  )
+  return <p data-testid="where">{location.pathname + location.search}</p>
 }
 
+/** Opens the holding page; with `from`, the way the app does, with that page before it in history. */
 function renderPage(from?: string) {
+  const entries = from
+    ? [from, { pathname: '/portfolio/ptt', state: { from } }]
+    : [{ pathname: '/portfolio/ptt' }]
   return render(
-    <MemoryRouter initialEntries={[{ pathname: '/portfolio/ptt', state: from ? { from } : null }]}>
+    <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
       <Routes>
         <Route path="/portfolio/:id" element={<HoldingDetail />} />
         <Route path="/portfolio" element={<Where />} />
+        <Route path="/accounts/:id" element={<Where />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -114,6 +117,11 @@ describe('Holding page', () => {
       'href',
       '/portfolio?account=settrade',
     )
+  })
+
+  it('goes back to the account page when opened from there', async () => {
+    renderPage('/accounts/settrade')
+    expect(await screen.findByRole('link', { name: 'Account' })).toHaveAttribute('href', '/accounts/settrade')
   })
 
   it('updates a price from the edit form and reloads', async () => {
@@ -177,15 +185,28 @@ describe('Holding page', () => {
     expect(sent.quantity! * sent.price!).toBeCloseTo(2 * 44000, -1)
   })
 
-  it('hands a deleted holding back to the list, which offers undo', async () => {
+  it.each(['/portfolio?account=settrade', '/accounts/settrade'])(
+    'hands a deleted holding back to %s by going back in history',
+    async (from) => {
+      const user = userEvent.setup()
+      renderPage(from)
+
+      await user.click(await screen.findByRole('button', { name: 'Edit' }))
+      await user.click(screen.getByRole('button', { name: /delete holding/i }))
+      expect(await screen.findByTestId('where')).toHaveTextContent(from)
+      expect(takeDeletedHolding()).toMatchObject({ id: 'ptt' })
+      expect(api.deleteHolding).not.toHaveBeenCalled()
+    },
+  )
+
+  it('replaces itself with Portfolio when deleted after being opened directly', async () => {
     const user = userEvent.setup()
-    renderPage('/portfolio?account=settrade')
+    renderPage()
 
     await user.click(await screen.findByRole('button', { name: 'Edit' }))
     await user.click(screen.getByRole('button', { name: /delete holding/i }))
-    const where = await screen.findByTestId('where')
-    expect(where).toHaveTextContent('/portfolio?account=settrade')
-    expect(where).toHaveTextContent('"deletedHolding":{"id":"ptt"')
+    expect(await screen.findByTestId('where')).toHaveTextContent('/portfolio')
+    expect(takeDeletedHolding()).toMatchObject({ id: 'ptt' })
   })
 
   it('adds a dividend for this holding, starting from its symbol and account', async () => {

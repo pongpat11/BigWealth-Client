@@ -8,7 +8,9 @@ import { Sheet } from '@/components/ui/Sheet'
 import { ApiError } from '@/lib/api'
 import { listAccounts, type Account } from '@/lib/accounts'
 import { formatDateTime, formatPercent } from '@/lib/format'
-import { getPortfolio, holdingQuantityText, type Holding } from '@/lib/portfolio'
+import { deleteHolding, getPortfolio, holdingQuantityText, type Holding } from '@/lib/portfolio'
+import { useDeletedHolding } from '@/lib/holdingHandoff'
+import { useUndoableDelete } from '@/lib/useUndoableDelete'
 import {
   listTransactionPage,
   transferRoute,
@@ -64,12 +66,13 @@ function TxRow({ tx, accountId }: { tx: Transaction; accountId: string }) {
 }
 
 /** A holding in this account: symbol, quantity, value in its currency, return. */
-function HoldingLine({ holding }: { holding: Holding }) {
+function HoldingLine({ holding, accountId }: { holding: Holding; accountId: string }) {
   const gain = holding.gainPct
   return (
     <Link
       to={`/portfolio/${holding.id}`}
-      aria-label={t('Open holding {name}', { name: holding.symbol })}
+      // The holding page goes back here rather than to Portfolio.
+      state={{ from: `/accounts/${accountId}` }}
       className="flex items-center justify-between gap-3 py-3 transition-colors hover:bg-[var(--color-canvas)]"
     >
       <div className="min-w-0">
@@ -110,6 +113,9 @@ function AccountHoldings({
 }) {
   const [holdings, setHoldings] = useState<Holding[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  // Holdings deleted but still inside their undo window.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
 
   useEffect(() => {
     let live = true
@@ -123,10 +129,30 @@ function AccountHoldings({
     return () => {
       live = false
     }
-  }, [accountId, onLoaded])
+  }, [accountId, onLoaded, reloadKey])
+
+  // A holding deleted on its own page: hidden here, with the undo toast.
+  const undoable = useUndoableDelete()
+  useDeletedHolding((holding) => {
+    undoable.remove({
+      message: t('Deleted {name}', { name: holding.symbol }),
+      hide: () => setHidden((s) => new Set(s).add(holding.id)),
+      restore: () =>
+        setHidden((s) => {
+          const next = new Set(s)
+          next.delete(holding.id)
+          return next
+        }),
+      commit: () => deleteHolding(holding.id),
+      // Reloads the list, and through onLoaded the account's balance.
+      onCommitted: () => setReloadKey((k) => k + 1),
+    })
+  })
+  const shown = holdings?.filter((h) => !hidden.has(h.id)) ?? null
 
   return (
     <Card>
+      {undoable.toast}
       <CardHeader
         title={t('Holdings')}
         action={
@@ -143,14 +169,14 @@ function AccountHoldings({
           <p role="alert" className="py-6 text-center text-sm text-[var(--color-loss)]">
             {t('Could not load holdings.')}
           </p>
-        ) : holdings === null ? (
+        ) : shown === null ? (
           <p className="py-6 text-center text-sm text-[var(--color-muted)]">{t('Loading…')}</p>
-        ) : holdings.length === 0 ? (
+        ) : shown.length === 0 ? (
           <p className="py-6 text-center text-sm text-[var(--color-muted)]">
             {t('No holdings in this account yet.')}
           </p>
         ) : (
-          holdings.map((h) => <HoldingLine key={h.id} holding={h} />)
+          shown.map((h) => <HoldingLine key={h.id} holding={h} accountId={accountId} />)
         )}
       </CardBody>
     </Card>

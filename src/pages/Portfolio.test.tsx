@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { Portfolio } from './Portfolio'
 import * as api from '@/lib/portfolio'
 import * as accountsApi from '@/lib/accounts'
+import { handOffDeletedHolding } from '@/lib/holdingHandoff'
 import type { Account } from '@/lib/accounts'
 import type { DividendList, Holding, Portfolio as PortfolioData } from '@/lib/portfolio'
 
@@ -167,10 +168,15 @@ describe('Portfolio page', () => {
   })
 
   it('refreshes prices on request and keeps the figures on screen meanwhile', async () => {
+    // The time shown is the newest market quote, not when the page loaded.
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      holdings: [{ ...ptt, autoPrice: true, priceUpdatedAt: '2025-11-01T03:00:00.000Z' }, voo],
+    })
     const user = userEvent.setup()
     renderPage()
     await screen.findByText('฿395,250')
-    expect(screen.getByRole('button', { name: /refresh prices/i })).toHaveTextContent(/updated/i)
+    expect(screen.getByText(/^Prices as of 1 Nov/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /refresh prices/i }))
     expect(screen.getByText('฿395,250')).toBeInTheDocument()
@@ -387,28 +393,38 @@ describe('Portfolio page', () => {
     expect(within(thai).queryByText('No account')).not.toBeInTheDocument()
   })
 
-  it('opens a holding\'s page from the list, remembering the filter', async () => {
+  it('opens a holding\'s page from a row that reads its figures', async () => {
     renderPage('/portfolio?account=settrade')
-    const link = await screen.findByRole('link', { name: 'Open holding PTT' })
+    // No aria-label: the row's own text (symbol, value, gain) is its name.
+    const link = await screen.findByRole('link', { name: /^PTT .*฿191,250.*\+10\.9%/ })
     expect(link).toHaveAttribute('href', '/portfolio/ptt')
   })
 
   it('removes a holding deleted on its page, with undo', async () => {
     vi.mocked(api.deleteHolding).mockResolvedValue(undefined)
+    handOffDeletedHolding(ptt)
     const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={[{ pathname: '/portfolio', state: { deletedHolding: ptt } }]}>
-        <Portfolio />
-      </MemoryRouter>,
-    )
+    renderPage()
     await screen.findByText('฿395,250')
-    await waitFor(() => expect(screen.queryByRole('link', { name: 'Open holding PTT' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('link', { name: /^PTT / })).not.toBeInTheDocument())
     expect(screen.getByText('Deleted PTT')).toBeInTheDocument()
     expect(api.deleteHolding).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: /undo/i }))
-    expect(await screen.findByRole('link', { name: 'Open holding PTT' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /^PTT / })).toBeInTheDocument()
     expect(api.deleteHolding).not.toHaveBeenCalled()
+  })
+
+  it('still deletes a handed-off holding when the list fails to load', async () => {
+    vi.mocked(api.getPortfolio).mockRejectedValue(new Error('offline'))
+    vi.mocked(api.deleteHolding).mockResolvedValue(undefined)
+    handOffDeletedHolding(ptt)
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByText('Deleted PTT')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /dismiss/i }))
+    await waitFor(() => expect(api.deleteHolding).toHaveBeenCalledWith('ptt'))
   })
 
   it('edits a dividend from the list', async () => {
