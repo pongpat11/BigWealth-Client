@@ -1,62 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import {
-  ArrowLeftRight,
-  BarChart3,
-  CreditCard,
-  FileDown,
-  Home,
-  Landmark,
-  LogOut,
-  MoreHorizontal,
-  PieChart,
-  Repeat,
-  Settings,
-  Tag,
-  Tags,
-  Target,
-  Wallet,
-} from 'lucide-react'
+import { LogOut, MoreHorizontal } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout } from '@/lib/auth'
 import { t } from '@/lib/i18n'
+import { navItem, useNavLayout, type NavItem } from '@/lib/nav'
 import { runRecurring } from '@/lib/recurring'
 import { QuickAddProvider } from '@/components/QuickAdd'
 import { ErrorBoundary } from './ErrorBoundary'
+import { NavCustomizerProvider, useNavCustomizer } from './NavCustomizer'
 import { OfflineBanner } from './OfflineBanner'
-
-// Primary tabs — shown in the mobile bottom bar and at the top of the sidebar.
-const primaryNav = [
-  { to: '/', label: t('Home'), icon: Home, end: true },
-  { to: '/transactions', label: t('Transactions'), icon: ArrowLeftRight },
-  { to: '/portfolio', label: t('Portfolio'), icon: PieChart },
-  { to: '/budgets', label: t('Budgets'), icon: Wallet },
-] as const
-
-// Secondary screens — behind "More" on mobile, listed directly on desktop.
-const secondaryNav = [
-  { to: '/recurring', label: t('Recurring'), icon: Repeat },
-  { to: '/goals', label: t('Goals'), icon: Target },
-  { to: '/debts', label: t('Debts'), icon: CreditCard },
-  { to: '/reports', label: t('Reports'), icon: BarChart3 },
-  { to: '/export', label: t('Export'), icon: FileDown },
-  { to: '/accounts', label: t('Accounts'), icon: Landmark },
-  { to: '/categories', label: t('Categories'), icon: Tag },
-  { to: '/labels', label: t('Labels'), icon: Tags },
-  { to: '/settings', label: t('Settings'), icon: Settings },
-] as const
 
 function SidebarLink({
   to,
   label,
   icon: IconCmp,
   end,
-}: {
-  to: string
-  label: string
-  icon: typeof Home
-  end?: boolean
-}) {
+}: Pick<NavItem, 'to' | 'label' | 'icon' | 'end'>) {
   return (
     <NavLink
       to={to}
@@ -81,12 +41,7 @@ function TabLink({
   label,
   icon: IconCmp,
   end,
-}: {
-  to: string
-  label: string
-  icon: typeof Home
-  end?: boolean
-}) {
+}: Pick<NavItem, 'to' | 'label' | 'icon' | 'end'>) {
   return (
     <NavLink
       to={to}
@@ -104,6 +59,68 @@ function TabLink({
   )
 }
 
+const LONG_PRESS_MS = 500
+
+/**
+ * Mobile bottom tab bar: the user's tabs, then More. A long press anywhere on
+ * it opens the "Customize tab bar" sheet (and swallows the tap that follows).
+ */
+function TabBar() {
+  const { tabs } = useNavLayout()
+  const customize = useNavCustomizer()
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const pressed = useRef(false)
+
+  function cancel() {
+    clearTimeout(timer.current)
+    start.current = null
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (!customize || e.button !== 0) return
+    pressed.current = false
+    start.current = { x: e.clientX, y: e.clientY }
+    timer.current = setTimeout(() => {
+      pressed.current = true
+      navigator.vibrate?.(10)
+      customize()
+    }, LONG_PRESS_MS)
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    const s = start.current
+    if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10) cancel()
+  }
+
+  useEffect(() => cancel, [])
+
+  return (
+    <nav
+      aria-label={t('Primary')}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={cancel}
+      onPointerCancel={cancel}
+      onPointerLeave={cancel}
+      onContextMenu={(e) => e.preventDefault()}
+      onClickCapture={(e) => {
+        if (pressed.current) {
+          pressed.current = false
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }}
+      className="fixed inset-x-0 bottom-0 z-20 flex select-none [-webkit-touch-callout:none] print:hidden border-t border-[var(--color-line)] bg-[var(--color-surface)] px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1 lg:hidden"
+    >
+      {tabs.map((path) => (
+        <TabLink key={path} {...navItem(path)} />
+      ))}
+      <TabLink to="/more" label={t('More')} icon={MoreHorizontal} />
+    </nav>
+  )
+}
+
 // Screens that show no transaction data: a quick add there needs no reload
 // (which would also drop anything typed into their inline forms).
 const NO_TRANSACTION_DATA = new Set(['/categories', '/labels', '/settings', '/more'])
@@ -115,6 +132,7 @@ const NO_TRANSACTION_DATA = new Set(['/categories', '/labels', '/settings', '/mo
 export function AppShell() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { tabs, more } = useNavLayout()
   // Bumped when opening the app created recurring entries, so the screen on
   // show reloads and includes them.
   const [dataVersion, setDataVersion] = useState(0)
@@ -137,62 +155,56 @@ export function AppShell() {
   }
 
   return (
-    <div className="min-h-full lg:flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden print:!hidden w-60 shrink-0 flex-col gap-6 border-r border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-5 lg:flex">
-        <div className="flex items-center gap-2.5 px-3">
-          <div className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">
-            ฿
+    <NavCustomizerProvider>
+      <div className="min-h-full lg:flex">
+        {/* Desktop sidebar */}
+        <aside className="hidden print:!hidden w-60 shrink-0 flex-col gap-6 border-r border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-5 lg:flex">
+          <div className="flex items-center gap-2.5 px-3">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-brand-600 text-lg font-bold text-white">
+              ฿
+            </div>
+            <span className="text-lg font-bold tracking-tight text-[var(--color-ink)]">
+              BigWealth
+            </span>
           </div>
-          <span className="text-lg font-bold tracking-tight text-[var(--color-ink)]">
-            BigWealth
-          </span>
-        </div>
-        <nav className="flex flex-col gap-1" aria-label={t('Primary')}>
-          {primaryNav.map((item) => (
-            <SidebarLink key={item.to} {...item} />
-          ))}
-          <div className="mx-3 my-2 h-px bg-[var(--color-line)]" />
-          {secondaryNav.map((item) => (
-            <SidebarLink key={item.to} {...item} />
-          ))}
-        </nav>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--color-muted)] transition-colors hover:bg-[var(--color-canvas)] hover:text-[var(--color-loss)]"
+          <nav className="flex flex-col gap-1" aria-label={t('Primary')}>
+            {tabs.map((path) => (
+              <SidebarLink key={path} {...navItem(path)} />
+            ))}
+            <div className="mx-3 my-2 h-px bg-[var(--color-line)]" />
+            {more.map((path) => (
+              <SidebarLink key={path} {...navItem(path)} />
+            ))}
+          </nav>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-[var(--color-muted)] transition-colors hover:bg-[var(--color-canvas)] hover:text-[var(--color-loss)]"
+          >
+            <LogOut size={18} aria-hidden />
+            {t('Log out')}
+          </button>
+        </aside>
+
+        {/* Content. After a quick add, a screen showing transaction data
+            reloads unless it updated itself in place. */}
+        <QuickAddProvider
+          onChange={() => {
+            if (!NO_TRANSACTION_DATA.has(pathname)) setDataVersion((v) => v + 1)
+          }}
         >
-          <LogOut size={18} aria-hidden />
-          {t('Log out')}
-        </button>
-      </aside>
+          <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6 print:max-w-none print:p-0">
+            <OfflineBanner />
+            {/* Keyed by path so a crashed screen clears when you navigate away. */}
+            <ErrorBoundary key={`${pathname}#${dataVersion}`}>
+              <Outlet />
+            </ErrorBoundary>
+          </main>
+        </QuickAddProvider>
 
-      {/* Content. After a quick add, a screen showing transaction data
-          reloads unless it updated itself in place. */}
-      <QuickAddProvider
-        onChange={() => {
-          if (!NO_TRANSACTION_DATA.has(pathname)) setDataVersion((v) => v + 1)
-        }}
-      >
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-40 pt-4 lg:px-8 lg:pb-28 lg:pt-6 print:max-w-none print:p-0">
-          <OfflineBanner />
-          {/* Keyed by path so a crashed screen clears when you navigate away. */}
-          <ErrorBoundary key={`${pathname}#${dataVersion}`}>
-            <Outlet />
-          </ErrorBoundary>
-        </main>
-      </QuickAddProvider>
-
-      {/* Mobile bottom tab bar */}
-      <nav
-        aria-label={t('Primary')}
-        className="fixed inset-x-0 bottom-0 z-20 flex print:hidden border-t border-[var(--color-line)] bg-[var(--color-surface)] px-1 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-1 lg:hidden"
-      >
-        {primaryNav.map((item) => (
-          <TabLink key={item.to} {...item} />
-        ))}
-        <TabLink to="/more" label={t('More')} icon={MoreHorizontal} />
-      </nav>
-    </div>
+        {/* Mobile bottom tab bar */}
+        <TabBar />
+      </div>
+    </NavCustomizerProvider>
   )
 }
