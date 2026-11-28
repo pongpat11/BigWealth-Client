@@ -119,13 +119,73 @@ describe('Portfolio page', () => {
 
     const thai = screen.getByRole('region', { name: 'Thai Stocks' })
     expect(within(thai).getByText('5,000 · ฿38.25')).toBeInTheDocument()
-    expect(within(thai).getByText('▲ +10.9%')).toBeInTheDocument()
+    // The gain as money and as a percentage.
+    expect(within(thai).getByText('▲ +฿18,750 · +10.9%')).toBeInTheDocument()
 
-    // A USD holding shows its price in dollars and its value in baht.
+    // A USD holding shows its price in dollars and its value in baht. A group
+    // of one has no heading total (it would repeat the row).
     const us = screen.getByRole('region', { name: 'US Stocks' })
     expect(within(us).getByText('12 · $500.00')).toBeInTheDocument()
-    expect(within(us).getByText('฿204,000')).toBeInTheDocument()
-    expect(within(us).getByText('▼ -3.9%')).toBeInTheDocument()
+    expect(within(us).getAllByText('฿204,000')).toHaveLength(1)
+    expect(within(us).getByText('▼ -฿8,160 · -3.9%')).toBeInTheDocument()
+  })
+
+  it('totals each group and rounds the allocation to 100%', async () => {
+    const kbank: Holding = { ...ptt, id: 'kbank', symbol: 'KBANK', marketValue: 100000, marketValueTHB: 100000 }
+    vi.mocked(api.getPortfolio).mockResolvedValue({
+      ...portfolio,
+      holdings: [ptt, kbank, voo],
+      allocation: [
+        // 1/3 each would round to 33 + 33 + 33 = 99.
+        { assetClass: 'us', valueTHB: 1, pct: 33.33 },
+        { assetClass: 'set', valueTHB: 1, pct: 33.33 },
+        { assetClass: 'crypto', valueTHB: 1, pct: 33.33 },
+      ],
+    })
+    renderPage()
+
+    const thai = await screen.findByRole('region', { name: 'Thai Stocks' })
+    expect(within(thai).getByText('฿291,250')).toBeInTheDocument()
+    expect(screen.getByText('34%')).toBeInTheDocument()
+    expect(screen.getAllByText('33%')).toHaveLength(2)
+  })
+
+  it('keeps the open tab in the URL and moves between tabs with the arrow keys', async () => {
+    const user = userEvent.setup()
+    renderPage('/portfolio?tab=dividends')
+    expect(await screen.findByText('฿2,738')).toBeInTheDocument()
+    const dividendsTab = screen.getByRole('tab', { name: /dividends/i })
+    expect(dividendsTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', dividendsTab.id)
+
+    dividendsTab.focus()
+    await user.keyboard('{ArrowLeft}')
+    const holdingsTab = screen.getByRole('tab', { name: /holdings/i })
+    expect(holdingsTab).toHaveAttribute('aria-selected', 'true')
+    expect(holdingsTab).toHaveFocus()
+  })
+
+  it('refreshes prices on request and keeps the figures on screen meanwhile', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('฿395,250')
+    expect(screen.getByRole('button', { name: /refresh prices/i })).toHaveTextContent(/updated/i)
+
+    await user.click(screen.getByRole('button', { name: /refresh prices/i }))
+    expect(screen.getByText('฿395,250')).toBeInTheDocument()
+    await waitFor(() => expect(api.getPortfolio).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows field errors next to the field', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('฿395,250')
+
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
+    await user.click(screen.getByRole('button', { name: /add holding/i }))
+    const symbol = screen.getByLabelText('Symbol')
+    expect(symbol).toHaveAttribute('aria-invalid', 'true')
+    expect(symbol).toHaveAccessibleDescription(/enter a symbol/i)
   })
 
   it('warns when USD holdings could not be converted', async () => {
@@ -161,7 +221,7 @@ describe('Portfolio page', () => {
     renderPage()
     await screen.findByText('฿395,250')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.type(screen.getByLabelText('Symbol'), 'cpall')
     await user.type(screen.getByLabelText('Quantity'), '4000')
     await user.type(screen.getByLabelText(/average cost/i), '62')
@@ -189,7 +249,7 @@ describe('Portfolio page', () => {
     renderPage()
     await screen.findByText('฿395,250')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.type(screen.getByLabelText('Symbol'), 'kfsdiv')
     await user.selectOptions(screen.getByLabelText(/asset class/i), 'fund')
     expect(screen.queryByRole('checkbox', { name: /update price automatically/i })).toBeNull()
@@ -213,7 +273,7 @@ describe('Portfolio page', () => {
     renderPage()
     await screen.findByText('฿395,250')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.type(screen.getByLabelText('Symbol'), 'gold')
     await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
     expect(screen.getByRole('checkbox', { name: /update price automatically/i })).toBeChecked()
@@ -236,7 +296,7 @@ describe('Portfolio page', () => {
     renderPage()
     await screen.findByText('฿395,250')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.type(screen.getByLabelText('Symbol'), 'xau')
     await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
     expect(screen.getByRole('button', { name: /baht-weight/i })).toHaveAttribute('aria-pressed', 'true')
@@ -255,7 +315,7 @@ describe('Portfolio page', () => {
     // Ounces are the default for gold in dollars; in baht the unit has to be sent.
     expect(vi.mocked(api.createHolding).mock.calls[0][0]).not.toHaveProperty('goldUnit')
     await waitFor(() => expect(api.getPortfolio).toHaveBeenCalledTimes(2))
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.type(screen.getByLabelText('Symbol'), 'xau')
     await user.selectOptions(screen.getByLabelText(/asset class/i), 'gold')
     await user.click(screen.getByRole('button', { name: 'Troy ounce' }))
@@ -329,7 +389,7 @@ describe('Portfolio page', () => {
     renderPage()
     await screen.findByText('฿395,250')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new holding/i }))
     await user.selectOptions(screen.getByLabelText(/asset class/i), 'crypto')
     expect(screen.getByLabelText('Currency')).toHaveValue('USD')
   })
@@ -426,7 +486,7 @@ describe('Portfolio page', () => {
     await user.click(screen.getByRole('tab', { name: /dividends/i }))
     await screen.findByText('฿2,738')
 
-    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    await user.click(screen.getByRole('button', { name: /new dividend/i }))
     await user.type(screen.getByLabelText('Symbol'), 'PTT')
     await user.type(screen.getByLabelText('Gross amount'), '100')
     await user.type(screen.getByLabelText('Withholding tax'), '150')
@@ -434,6 +494,30 @@ describe('Portfolio page', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/between 0 and the gross/i)
     expect(api.createDividend).not.toHaveBeenCalled()
+  })
+
+  it('takes a dividend\'s currency from the holding and offers the usual withholding', async () => {
+    vi.mocked(api.createDividend).mockResolvedValue(dividends.items[0])
+    const user = userEvent.setup()
+    renderPage('/portfolio?tab=dividends')
+    await screen.findByText('฿2,738')
+
+    await user.click(screen.getByRole('button', { name: /new dividend/i }))
+    await user.type(screen.getByLabelText('Symbol'), 'voo')
+    expect(screen.getByLabelText('Currency')).toHaveValue('USD')
+    await user.clear(screen.getByLabelText('Symbol'))
+    await user.type(screen.getByLabelText('Symbol'), 'ptt')
+    expect(screen.getByLabelText('Currency')).toHaveValue('THB')
+
+    await user.type(screen.getByLabelText('Gross amount'), '2400')
+    await user.click(screen.getByRole('button', { name: 'Use 10% (฿240.00)' }))
+    expect(screen.getByLabelText('Withholding tax')).toHaveValue('240')
+    await user.click(screen.getByRole('button', { name: /add dividend/i }))
+    await waitFor(() =>
+      expect(api.createDividend).toHaveBeenCalledWith(
+        expect.objectContaining({ symbol: 'PTT', currency: 'THB', gross: 2400, withholdingTax: 240 }),
+      ),
+    )
   })
 
   describe('accounts', () => {
@@ -480,7 +564,7 @@ describe('Portfolio page', () => {
       renderPage()
       await screen.findByText('฿395,250')
 
-      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.click(screen.getByRole('button', { name: /new holding/i }))
       await user.type(screen.getByLabelText('Symbol'), 'voo')
       await user.type(screen.getByLabelText('Quantity'), '1')
       await user.type(screen.getByLabelText(/average cost/i), '500')
@@ -501,7 +585,7 @@ describe('Portfolio page', () => {
       renderPage('/portfolio?account=ibkr')
       await screen.findByText('฿395,250')
 
-      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.click(screen.getByRole('button', { name: /new holding/i }))
       expect(screen.getByLabelText('Account')).toHaveValue('ibkr')
     })
 
@@ -511,7 +595,7 @@ describe('Portfolio page', () => {
       renderPage()
       await screen.findByText('฿395,250')
 
-      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.click(screen.getByRole('button', { name: /new holding/i }))
       expect(screen.getByRole('link', { name: /create an investment account first/i })).toHaveAttribute(
         'href',
         '/accounts',
@@ -531,7 +615,7 @@ describe('Portfolio page', () => {
       await user.click(screen.getByRole('tab', { name: /dividends/i }))
       await screen.findByText('฿2,738')
 
-      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      await user.click(screen.getByRole('button', { name: /new dividend/i }))
       await user.type(screen.getByLabelText('Symbol'), 'voo')
       expect(screen.getByLabelText('Account')).toHaveValue('ibkr')
       await user.type(screen.getByLabelText('Gross amount'), '20')

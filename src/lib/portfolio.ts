@@ -184,6 +184,53 @@ export async function deleteDividend(id: string): Promise<void> {
   await apiFetch<void>(`/dividends/${id}`, { method: 'DELETE', ...auth() })
 }
 
+/**
+ * Unrealised gain of a holding: in baht when it can be converted, otherwise
+ * in the holding's own currency.
+ */
+export function holdingGain(h: Pick<Holding, 'marketValue' | 'costBasis' | 'marketValueTHB' | 'costBasisTHB' | 'currency'>): {
+  amount: number
+  currency: Currency
+} {
+  if (h.marketValueTHB !== null && h.costBasisTHB !== null) {
+    return { amount: Math.round((h.marketValueTHB - h.costBasisTHB) * 100) / 100, currency: 'THB' }
+  }
+  return { amount: Math.round((h.marketValue - h.costBasis) * 100) / 100, currency: h.currency }
+}
+
+/** Baht value of the holdings that can be converted (the rest are left out). */
+export function totalValueTHB(rows: Pick<Holding, 'marketValueTHB'>[]): number {
+  return rows.reduce((sum, h) => sum + (h.marketValueTHB ?? 0), 0)
+}
+
+/**
+ * Whole-number percentages that add up to exactly 100 (largest remainder),
+ * so an allocation legend never reads 99% or 101%. All zeros stay zero.
+ */
+export function roundPercents(values: number[]): number[] {
+  const total = values.reduce((a, b) => a + Math.max(0, b), 0)
+  if (total <= 0) return values.map(() => 0)
+  const exact = values.map((v) => (Math.max(0, v) / total) * 100)
+  const floors = exact.map(Math.floor)
+  let left = 100 - floors.reduce((a, b) => a + b, 0)
+  const order = exact
+    .map((v, i) => ({ i, rest: v - floors[i] }))
+    .sort((a, b) => b.rest - a.rest || a.i - b.i)
+  for (const { i } of order) {
+    if (left <= 0) break
+    floors[i] += 1
+    left -= 1
+  }
+  return floors
+}
+
+/** Withholding rate usually applied to dividends of this class, in percent. */
+export function usualWithholdingPct(assetClass: AssetClass | undefined): number | null {
+  if (assetClass === 'set') return 10
+  if (assetClass === 'us') return 15
+  return null
+}
+
 export type HoldingSort = 'value' | 'gain' | 'symbol'
 
 /** Larger value first. Compares in THB when both have it, otherwise in the
